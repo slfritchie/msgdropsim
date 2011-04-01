@@ -49,7 +49,8 @@ above list.
 5. No.  Exhaustive exploration of the entire state space is beyond the
    scope of this tool.  However, it's my hope that this tool points
    the way for something similarly easy for
-   [McErlang](https://babel.ls.fi.upm.es/trac/McErlang/).
+   [McErlang](https://babel.ls.fi.upm.es/trac/McErlang/) which **is**
+   capable of performing full state space exploration.
 
 How to run simulated protocols
 ------------------------------
@@ -61,6 +62,7 @@ instructions or pointers to instructions.
 
 All of the buggy simulator code in a file `foo.erl` has a
 corresponding text file called `foo.txt` which contains:
+
 * Instructions on how to run the test case
 * Output from the test case
 * Annotations within the output, marked by `%%` characters, that help
@@ -72,21 +74,41 @@ How the simulator works
 TODO Finish this section
 
 * Write a callback module
-** `gen_initial_ops/4` The simulator scheduler sends messages from
-   created by this generator to each of the simulated processes.
-   QuickCheck will randomly choose some number of client & server
-   processes for each test case.
-** `gen_client_initial_states/2`
-   Generate the local process state data for each client process.
-** `gen_server_initial_states/2`
-   Generate the local process state data for each server process.
-** `verify_property/11`
-   After a simulated test case has run, verify that whatever protocol
-   properties should be true are indeed true.  Any failure will cause
-   QuickCheck to try to find a smaller-but-still-failing
-   counterexample.
+  * `gen_initial_ops/4` The simulator scheduler sends messages from
+     created by this generator to each of the simulated processes.
+     QuickCheck will randomly choose some number of client & server
+     processes for each test case.
+  * `gen_client_initial_states/2`
+     Generate the local process state data for each client process.
+  * `gen_server_initial_states/2`
+     Generate the local process state data for each server process.
+  * `verify_property/11`
+     After a simulated test case has run, verify that whatever protocol
+     properties should be true are indeed true.  Any failure will cause
+     QuickCheck to try to find a smaller-but-still-failing
+     counterexample.
+* Compile
+* Run via `eqc:quickcheck(slf_msgsim_qc:prop_simulate(YourSimModuleName, PropertyList)`
+
+  * If your test passes 100 test cases, then you probably need to run
+    for thousands or even millions of test cases.  Use
+    `eqc:numtests()` and/or/both `eqc_gen:resize(N, YourProperty)`
+    where `N` is a large number on the range of 50-100.
+
+Future work
+-----------
+
+* Fully implement the delayed message feature.  The framework is
+  there, but the only-slightly-tricky bit of maintaining Erlang
+  message ordering guarantees needs to be done.
+* Add support for simulated Erlang monitors, Erlang's method for
+  informing processes that messages may have been dropped.
+* Investigate integration of message dropping (and perhaps also
+  message delaying?) with McErlang.
 
 Contact the author
 ------------------
 
 Contact Scott Lystig Fritchie via GitHub email or via `slfritchie`
+`(at}` `snookles{dot)com`.
+
