@@ -4,7 +4,7 @@ Message Passing (and Dropping) Protocol Simulator
 Wouldn't it be great if you could:
 
 * pick up a distributed algorithms textbook (Nancy Lynch's is my
-  favorite) or research paper or a crazy idea scribbled in a notebook
+  favorite) or a research paper or a crazy idea scribbled in a notebook
   for some message passing protocol, then...
 * write a small amount of code to implement the algorithm, then...
 * run a simulator to tell you if it works?
@@ -67,6 +67,34 @@ corresponding text file called `foo.txt` which contains:
 * Output from the test case
 * Annotations within the output, marked by `%%` characters, that help
   explain what the output means.
+
+Suggestions for following the evolution of a flawed protocol
+------------------------------------------------------------
+
+The simulator source contains code for simulating two protocols
+
+* An echo service, one flawed and one ok.
+  * The source for these are `echo_bad1_sim.erl` and `echo_sim.erl`,
+    respectively.
+* A distributed counter service, where all clients are supposed to
+  generate strictly-increasing counters.  There are five variations of
+  the protocol; all of them are buggy.
+  * The sources for these are `distrib_counter_bad1_sim.erl` through
+    `distrib_counter_bad5_sim.erl`.
+
+The previous section mentioned the `foo.txt` file that has annotated
+simulator output and discussion of what's wrong with each
+implementation, e.g. `echo_bad1_sim.txt` and
+`distrib_counter_bad1_sim.txt`.
+
+For the distributed counter simulations, it can be instructive to use
+"diff" to compare each implementation, in sequence, to see what
+changed.
+
+* diff -u distrib_counter_bad1_sim.erl distrib_counter_bad2_sim.erl
+* diff -u distrib_counter_bad2_sim.erl distrib_counter_bad3_sim.erl
+* diff -u distrib_counter_bad3_sim.erl distrib_counter_bad4_sim.erl
+* diff -u distrib_counter_bad4_sim.erl distrib_counter_bad5_sim.erl
 
 How the simulator works
 -----------------------
