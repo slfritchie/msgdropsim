@@ -1,0 +1,150 @@
+NOTE: Search for %% for hints on what to look for when something goes wrong.
+
+Summary: Found an error: duplicate counters seen by the same client.
+
+(rk@sbb)75> eqc:quickcheck(eqc:numtests(100,slf_msgsim_qc:prop_simulate(distrib_counter_bad1_sim, []))).
+.......................Failed! After 24 tests.
+%% 1 client, 2 servers, 1 key (ignored)
+{1,2,1}
+%% 2 counter ops, both by same client
+{[{c1,{counter_op,[s1,s2]}},{c1,{counter_op,[s1,s2]}}],
+ [{c1,[],#Fun<distrib_counter_bad1_sim.5.52918649>}],
+ [{s1,6,#Fun<distrib_counter_bad1_sim.4.5305677>},
+  {s2,5,#Fun<distrib_counter_bad1_sim.4.5305677>}],
+%% Schedule isn't weird
+ [c1,s2,c1,s1],
+%% A single partition between c1 -> s1
+ [{partition,[c1,c1,c1],[s1,s1,s1],4,12}]}
+Failed:
+F1 = {1,2,1}
+F2 = {[{c1,{counter_op,[s1,s2]}},{c1,{counter_op,[s1,s2]}}],
+      [{c1,[],#Fun<distrib_counter_bad1_sim.5.52918649>}],
+      [{s1,6,#Fun<distrib_counter_bad1_sim.4.5305677>},
+       {s2,5,#Fun<distrib_counter_bad1_sim.4.5305677>}],
+      [c1,s2,c1,s1],
+      [{partition,[c1,c1,c1],[s1,s1,s1],4,12}]}
+End2 = {sched,15,6,
+              [c1,s2,c1,s1],
+              [],
+              [{c1,{proc,c1,unused,[],
+                         {[],[]},
+                         {[],[]},
+                         outbox,#Fun<distrib_counter_bad1_sim.5.52918649>,
+                         undefined}},
+               {s1,{proc,s1,7,[],
+                         {[],[]},
+                         {[],[]},
+                         delayed,#Fun<distrib_counter_bad1_sim.4.5305677>,
+                         undefined}},
+               {s2,{proc,s2,7,[],
+                         {[],[]},
+                         {[],[]},
+                         delayed,#Fun<distrib_counter_bad1_sim.4.5305677>,
+                         undefined}}],
+              [{recv,14,scheduler,c1,timeout},
+               {recv,13,s2,c1,{incr_counter_reply,s2,6}},
+               {deliver,12,s2,c1,{incr_counter_reply,s2,6}},
+               {bang,11,s2,c1,{incr_counter_reply,s2,6}},
+               {recv,11,c1,s2,{incr_counter,c1}},
+               {deliver,10,c1,s2,{incr_counter,c1}},
+               {bang,9,c1,s2,{incr_counter,c1}},
+               {drop,9,c1,s1,{incr_counter,c1}},
+               {recv,9,scheduler,c1,{counter_op,[s1,s2]}},
+               {recv,8,s2,c1,{incr_counter_reply,s2,5}},
+               {deliver,7,s2,c1,{incr_counter_reply,s2,5}},
+               {recv,6,s1,c1,{incr_counter_reply,s1,6}},
+               {deliver,5,s1,c1,{incr_counter_reply,s1,6}},
+               {bang,4,s2,c1,{incr_counter_reply,s2,5}},
+               {recv,4,c1,s2,{incr_counter,c1}},
+               {deliver,3,c1,s2,{incr_counter,c1}},
+               {bang,2,s1,c1,{incr_counter_reply,s1,6}},
+               {recv,2,c1,s1,{incr_counter,c1}},
+               {deliver,1,c1,s1,{incr_counter,c1}},
+               {bang,0,c1,s2,{incr_counter,c1}},
+               {bang,0,c1,s1,{incr_counter,c1}},
+               {recv,0,scheduler,c1,{counter_op,[s1,s2]}}],
+              [{c1,14,{counter,6}},{c1,8,{counter,6}}],
+              [{{c1,s1},[4,5,6,7,8,9,10,11,12]}]}
+Runnable = [], Receivable = []
+%% Duplicate counters are bad
+Emitted counters = [6,6]
+runnable: passed
+ops_finish: passed
+%% ... and the emits_unique property caught the duplicates
+emits_unique: failed
+not_retro: passed
+Shrinking.........(9 times)
+{1,2,1}
+%% Same ops with same actors
+{[{c1,{counter_op,[s1,s2]}},{c1,{counter_op,[s1,s2]}}],
+ [{c1,[],#Fun<distrib_counter_bad1_sim.5.52918649>}],
+ [{s1,1,#Fun<distrib_counter_bad1_sim.4.5305677>},
+  {s2,0,#Fun<distrib_counter_bad1_sim.4.5305677>}],
+%% Scheduler simplified slightly
+ [s1,c1,s2],
+%% The length of the c1 -> s1 partition shortened slightly.
+ [{partition,[c1],[s1],1,9}]}
+Failed:
+F1 = {1,2,1}
+F2 = {[{c1,{counter_op,[s1,s2]}},{c1,{counter_op,[s1,s2]}}],
+      [{c1,[],#Fun<distrib_counter_bad1_sim.5.52918649>}],
+%% Server s1 starts with counter = 1
+%% Server s2 starts with counter = 0
+      [{s1,1,#Fun<distrib_counter_bad1_sim.4.5305677>},
+       {s2,0,#Fun<distrib_counter_bad1_sim.4.5305677>}],
+      [s1,c1,s2],
+%% The network partition will interfere with c1's second request, look
+%% for the timeout that it receives at the end of the trace.
+      [{partition,[c1],[s1],1,9}]}
+End2 = {sched,15,6,
+              [s1,c1,s2],
+              [],
+              [{c1,{proc,c1,unused,[],
+                         {[],[]},
+                         {[],[]},
+                         outbox,#Fun<distrib_counter_bad1_sim.5.52918649>,
+                         undefined}},
+               {s1,{proc,s1,2,[],
+                         {[],[]},
+                         {[],[]},
+                         delayed,#Fun<distrib_counter_bad1_sim.4.5305677>,
+                         undefined}},
+               {s2,{proc,s2,2,[],
+                         {[],[]},
+                         {[],[]},
+                         delayed,#Fun<distrib_counter_bad1_sim.4.5305677>,
+                         undefined}}],
+%% This is the scheduler trace, in reverse order.  Note that the
+%% partition has caused a timeout at simulated time = 14.
+              [{recv,14,scheduler,c1,timeout},
+               {recv,13,s2,c1,{incr_counter_reply,s2,1}},
+               {deliver,12,s2,c1,{incr_counter_reply,s2,1}},
+               {bang,11,s2,c1,{incr_counter_reply,s2,1}},
+               {recv,11,c1,s2,{incr_counter,c1}},
+               {deliver,10,c1,s2,{incr_counter,c1}},
+               {bang,9,c1,s2,{incr_counter,c1}},
+               {drop,9,c1,s1,{incr_counter,c1}},
+               {recv,9,scheduler,c1,{counter_op,[s1,s2]}},
+               {recv,8,s2,c1,{incr_counter_reply,s2,0}},
+               {deliver,7,s2,c1,{incr_counter_reply,s2,0}},
+               {recv,6,s1,c1,{incr_counter_reply,s1,1}},
+               {deliver,5,s1,c1,{incr_counter_reply,s1,1}},
+               {bang,4,s2,c1,{incr_counter_reply,s2,0}},
+               {recv,4,c1,s2,{incr_counter,c1}},
+               {deliver,3,c1,s2,{incr_counter,c1}},
+               {bang,2,s1,c1,{incr_counter_reply,s1,1}},
+               {recv,2,c1,s1,{incr_counter,c1}},
+               {deliver,1,c1,s1,{incr_counter,c1}},
+               {bang,0,c1,s2,{incr_counter,c1}},
+               {bang,0,c1,s1,{incr_counter,c1}},
+               {recv,0,scheduler,c1,{counter_op,[s1,s2]}}],
+%% This is the user trace, in reverse order.  After the timeout,
+%% client c1 uses the single reply that it received (at time = 12)
+%% and emits a duplicate counter.
+              [{c1,14,{counter,1}},{c1,8,{counter,1}}],
+              [{{c1,s1},[1,2,3,4,5,6,7,8,9]}]}
+Runnable = [], Receivable = []
+%% Bummer, non-unique counters
+Emitted counters = [1,1]
+emits_unique: failed
+false

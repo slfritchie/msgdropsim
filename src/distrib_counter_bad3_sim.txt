@@ -1,0 +1,263 @@
+NOTE: Search for %% for hints on what to look for when something goes wrong.
+
+Difference with distrib_counter_bad2_sim.erl:
+
+The previous flawed protocol, #2, showed that the current protocol
+can't keep clients that act at roughly the same time from emitting
+counters that do not go backward when interpreted by *wall clock*
+time.
+
+So, we change the nature of the verification: we check to make certain
+that each client never sees its own counters go backward.  
+
+This change of model means that we now acknowledge that the actual
+client<->server protocol cannot provide strictly increasing counters
+across multiple clients as seen/interpreted by wall clock time.
+
+Let us now see if the protocol is sufficient to provide strictly
+increasing counters to individual clients.
+
+Summary: Unfortunately, there's another problem: our fake floating
+         point numbers do not collate as we expect.  "9.anything" will
+         always be larger than "10.anything".  A single client gets
+         counters in order of "9.something" and "10.something", which
+         violates our strictly increasing property.
+
+(rk@sbb)114> eqc:quickcheck(slf_msgsim_qc:prop_simulate(distrib_counter_bad3_sim, [])).
+...................................Failed! After 36 tests.
+%% 1 client, 4 servers, 1 key (ignored)
+{1,4,1}
+%% 2 ops by one client
+{[{c1,{counter_op,[s1,s2,s3,s4]}},{c1,{counter_op,[s1,s2,s3,s4]}}],
+ [{c1,[],#Fun<distrib_counter_bad3_sim.6.52918649>}],
+%% Server s1 starts with counter = 3
+%% Server s2 starts with counter = 6
+%% Server s3 starts with counter = 7
+%% Server s4 starts with counter = 9
+ [{s1,3,#Fun<distrib_counter_bad3_sim.5.5305677>},
+  {s2,6,#Fun<distrib_counter_bad3_sim.5.5305677>},
+  {s3,7,#Fun<distrib_counter_bad3_sim.5.5305677>},
+  {s4,9,#Fun<distrib_counter_bad3_sim.5.5305677>}],
+%% Scheduler isn't crazy
+ [c1,s1,s2,s3,s4],
+%% One effective network partition (both source & dest sets are non-empty)
+ [{partition,[],[],10,15},
+  {partition,[c1,c1,c1,c1],[s1],1,1},
+  {partition,[s4,s4,s2,s3],[],9,19},
+  {partition,[],[s3],3,10},
+  {partition,[s3],[],3,10}]}
+Failed:
+F1 = {1,4,1}
+F2 = {[{c1,{counter_op,[s1,s2,s3,s4]}},{c1,{counter_op,[s1,s2,s3,s4]}}],
+      [{c1,[],#Fun<distrib_counter_bad3_sim.6.52918649>}],
+      [{s1,3,#Fun<distrib_counter_bad3_sim.5.5305677>},
+       {s2,6,#Fun<distrib_counter_bad3_sim.5.5305677>},
+       {s3,7,#Fun<distrib_counter_bad3_sim.5.5305677>},
+       {s4,9,#Fun<distrib_counter_bad3_sim.5.5305677>}],
+      [c1,s1,s2,s3,s4],
+      [{partition,[],[],10,15},
+       {partition,[c1,c1,c1,c1],[s1],1,1},
+       {partition,[s4,s4,s2,s3],[],9,19},
+       {partition,[],[s3],3,10},
+       {partition,[s3],[],3,10}]}
+End2 = {sched,34,16,
+              [c1,s1,s2,s3,s4],
+              [],
+              [{c1,{proc,c1,unused,[],
+                         {[],[]},
+                         {[],[]},
+                         outbox,#Fun<distrib_counter_bad3_sim.6.52918649>,
+                         undefined}},
+               {s1,{proc,s1,5,[],
+                         {[],[]},
+                         {[],[]},
+                         delayed,#Fun<distrib_counter_bad3_sim.5.5305677>,
+                         undefined}},
+               {s2,{proc,s2,8,[],
+                         {[],[]},
+                         {[],[]},
+                         delayed,#Fun<distrib_counter_bad3_sim.5.5305677>,
+                         undefined}},
+               {s3,{proc,s3,9,[],
+                         {[],[]},
+                         {[],[]},
+                         delayed,#Fun<distrib_counter_bad3_sim.5.5305677>,
+                         undefined}},
+               {s4,{proc,s4,11,[],
+                         {[],[]},
+                         {[],[]},
+                         delayed,#Fun<distrib_counter_bad3_sim.5.5305677>,
+                         undefined}}],
+              [{recv,33,s4,c1,{incr_counter_reply,s4,10}},
+               {deliver,32,s4,c1,{incr_counter_reply,s4,10}},
+               {recv,31,s3,c1,{incr_counter_reply,s3,8}},
+               {bang,30,s4,c1,{incr_counter_reply,s4,10}},
+               {recv,30,c1,s4,{incr_counter,c1}},
+               {deliver,29,s3,c1,{incr_counter_reply,s3,8}},
+               {deliver,28,c1,s4,{incr_counter,c1}},
+               {bang,27,s3,c1,{incr_counter_reply,s3,8}},
+               {recv,27,c1,s3,{incr_counter,c1}},
+               {deliver,26,c1,s3,{incr_counter,c1}},
+               {recv,25,s2,c1,{incr_counter_reply,s2,7}},
+               {deliver,24,s2,c1,{incr_counter_reply,s2,7}},
+               {recv,23,s1,c1,{incr_counter_reply,s1,4}},
+               {bang,22,s2,c1,{incr_counter_reply,s2,7}},
+               {recv,22,c1,s2,{incr_counter,c1}},
+               {deliver,21,s1,c1,{incr_counter_reply,s1,4}},
+               {deliver,20,c1,s2,{incr_counter,c1}},
+               {bang,19,s1,c1,{incr_counter_reply,s1,4}},
+               {recv,19,c1,s1,{incr_counter,c1}},
+               {deliver,18,c1,s1,{incr_counter,c1}},
+               {bang,17,c1,s4,{incr_counter,c1}},
+               {bang,17,c1,s3,{incr_counter,c1}},
+               {bang,17,c1,s2,{incr_counter,c1}},
+               {bang,17,c1,s1,{incr_counter,c1}},
+               {recv,17,scheduler,c1,{counter_op,[s1,s2,s3,s4]}},
+               {recv,16,s4,c1,{incr_counter_reply,s4,9}},
+               {deliver,15,s4,c1,{incr_counter_reply,s4,9}},
+               {recv,14,s3,c1,{incr_counter_reply,s3,7}},
+               {bang,13,s4,c1,{incr_counter_reply,s4,9}},
+               {recv,13,c1,s4,{incr_counter,c1}},
+               {deliver,12,s3,c1,{incr_counter_reply,s3,7}},
+               {deliver,11,c1,s4,{incr_counter,c1}},
+               {bang,10,s3,c1,{incr_counter_reply,s3,7}},
+               {recv,10,c1,s3,{incr_counter,c1}},
+               {deliver,9,c1,s3,{incr_counter,c1}},
+               {recv,8,s2,c1,{incr_counter_reply,s2,6}},
+               {deliver,7,s2,c1,{incr_counter_reply,s2,6}},
+               {recv,6,s1,c1,{incr_counter_reply,s1,3}},
+               {bang,5,s2,c1,{incr_counter_reply,s2,6}},
+               {recv,5,c1,s2,{incr_counter,c1}},
+               {deliver,4,s1,c1,{incr_counter_reply,s1,3}},
+               {deliver,3,c1,s2,{incr_counter,c1}},
+               {bang,2,s1,c1,{incr_counter_reply,s1,3}},
+               {recv,2,c1,s1,{incr_counter,c1}},
+               {deliver,1,c1,s1,{incr_counter,c1}},
+               {bang,0,c1,s4,{incr_counter,c1}},
+               {bang,0,c1,s3,{incr_counter,c1}},
+               {bang,0,c1,s2,{incr_counter,c1}},
+               {bang,0,c1,s1,{incr_counter,c1}},
+               {recv,0,scheduler,c1,{counter_op,[s1,s2,s3,s4]}}],
+              [{c1,33,{counter,"10.s1s2s3s4"}},{c1,16,{counter,"9.s1s2s3s4"}}],
+              [{{c1,s1},[1]}]}
+Runnable = [], Receivable = []
+Emitted counters = ["9.s1s2s3s4","10.s1s2s3s4"]
+runnable: passed
+ops_finish: passed
+emits_unique: passed
+%% Bummer
+per_client_not_retro: failed
+%% I just love shrinking....
+Shrinking.......(7 times)
+%% Number of clients & servers & keys is the same, due to shrinking limitations
+{1,4,1}
+%% Same ops
+{[{c1,{counter_op,[s1,s2,s3,s4]}},{c1,{counter_op,[s1,s2,s3,s4]}}],
+ [{c1,[],#Fun<distrib_counter_bad3_sim.6.52918649>}],
+%% Server s1 starts with counter = 0
+%% Server s2 starts with counter = 0
+%% Server s3 starts with counter = 0
+%% Server s4 starts with counter = 9
+ [{s1,0,#Fun<distrib_counter_bad3_sim.5.5305677>},
+  {s2,0,#Fun<distrib_counter_bad3_sim.5.5305677>},
+  {s3,0,#Fun<distrib_counter_bad3_sim.5.5305677>},
+  {s4,9,#Fun<distrib_counter_bad3_sim.5.5305677>}],
+%% Same scheduler
+ [c1,s1,s2,s3,s4],
+%% No partitions
+ [{partition,[],[],0,0}]}
+Failed:
+F1 = {1,4,1}
+F2 = {[{c1,{counter_op,[s1,s2,s3,s4]}},{c1,{counter_op,[s1,s2,s3,s4]}}],
+      [{c1,[],#Fun<distrib_counter_bad3_sim.6.52918649>}],
+      [{s1,0,#Fun<distrib_counter_bad3_sim.5.5305677>},
+       {s2,0,#Fun<distrib_counter_bad3_sim.5.5305677>},
+       {s3,0,#Fun<distrib_counter_bad3_sim.5.5305677>},
+       {s4,9,#Fun<distrib_counter_bad3_sim.5.5305677>}],
+      [c1,s1,s2,s3,s4],
+      [{partition,[],[],0,0}]}
+End2 = {sched,34,16,
+              [c1,s1,s2,s3,s4],
+              [],
+              [{c1,{proc,c1,unused,[],
+                         {[],[]},
+                         {[],[]},
+                         outbox,#Fun<distrib_counter_bad3_sim.6.52918649>,
+                         undefined}},
+               {s1,{proc,s1,2,[],
+                         {[],[]},
+                         {[],[]},
+                         delayed,#Fun<distrib_counter_bad3_sim.5.5305677>,
+                         undefined}},
+               {s2,{proc,s2,2,[],
+                         {[],[]},
+                         {[],[]},
+                         delayed,#Fun<distrib_counter_bad3_sim.5.5305677>,
+                         undefined}},
+               {s3,{proc,s3,2,[],
+                         {[],[]},
+                         {[],[]},
+                         delayed,#Fun<distrib_counter_bad3_sim.5.5305677>,
+                         undefined}},
+               {s4,{proc,s4,11,[],
+                         {[],[]},
+                         {[],[]},
+                         delayed,#Fun<distrib_counter_bad3_sim.5.5305677>,
+                         undefined}}],
+              [{recv,33,s4,c1,{incr_counter_reply,s4,10}},
+               {deliver,32,s4,c1,{incr_counter_reply,s4,10}},
+               {recv,31,s3,c1,{incr_counter_reply,s3,1}},
+               {bang,30,s4,c1,{incr_counter_reply,s4,10}},
+               {recv,30,c1,s4,{incr_counter,c1}},
+               {deliver,29,s3,c1,{incr_counter_reply,s3,1}},
+               {deliver,28,c1,s4,{incr_counter,c1}},
+               {bang,27,s3,c1,{incr_counter_reply,s3,1}},
+               {recv,27,c1,s3,{incr_counter,c1}},
+               {deliver,26,c1,s3,{incr_counter,c1}},
+               {recv,25,s2,c1,{incr_counter_reply,s2,1}},
+               {deliver,24,s2,c1,{incr_counter_reply,s2,1}},
+               {recv,23,s1,c1,{incr_counter_reply,s1,1}},
+               {bang,22,s2,c1,{incr_counter_reply,s2,1}},
+               {recv,22,c1,s2,{incr_counter,c1}},
+               {deliver,21,s1,c1,{incr_counter_reply,s1,1}},
+               {deliver,20,c1,s2,{incr_counter,c1}},
+               {bang,19,s1,c1,{incr_counter_reply,s1,1}},
+               {recv,19,c1,s1,{incr_counter,c1}},
+               {deliver,18,c1,s1,{incr_counter,c1}},
+               {bang,17,c1,s4,{incr_counter,c1}},
+               {bang,17,c1,s3,{incr_counter,c1}},
+               {bang,17,c1,s2,{incr_counter,c1}},
+               {bang,17,c1,s1,{incr_counter,c1}},
+               {recv,17,scheduler,c1,{counter_op,[s1,s2,s3,s4]}},
+               {recv,16,s4,c1,{incr_counter_reply,s4,9}},
+               {deliver,15,s4,c1,{incr_counter_reply,s4,9}},
+               {recv,14,s3,c1,{incr_counter_reply,s3,0}},
+               {bang,13,s4,c1,{incr_counter_reply,s4,9}},
+               {recv,13,c1,s4,{incr_counter,c1}},
+               {deliver,12,s3,c1,{incr_counter_reply,s3,0}},
+               {deliver,11,c1,s4,{incr_counter,c1}},
+               {bang,10,s3,c1,{incr_counter_reply,s3,0}},
+               {recv,10,c1,s3,{incr_counter,c1}},
+               {deliver,9,c1,s3,{incr_counter,c1}},
+               {recv,8,s2,c1,{incr_counter_reply,s2,0}},
+               {deliver,7,s2,c1,{incr_counter_reply,s2,0}},
+               {recv,6,s1,c1,{incr_counter_reply,s1,0}},
+               {bang,5,s2,c1,{incr_counter_reply,s2,0}},
+               {recv,5,c1,s2,{incr_counter,c1}},
+               {deliver,4,s1,c1,{incr_counter_reply,s1,0}},
+               {deliver,3,c1,s2,{incr_counter,c1}},
+               {bang,2,s1,c1,{incr_counter_reply,s1,0}},
+               {recv,2,c1,s1,{incr_counter,c1}},
+               {deliver,1,c1,s1,{incr_counter,c1}},
+               {bang,0,c1,s4,{incr_counter,c1}},
+               {bang,0,c1,s3,{incr_counter,c1}},
+               {bang,0,c1,s2,{incr_counter,c1}},
+               {bang,0,c1,s1,{incr_counter,c1}},
+               {recv,0,scheduler,c1,{counter_op,[s1,s2,s3,s4]}}],
+              [{c1,33,{counter,"10.s1s2s3s4"}},{c1,16,{counter,"9.s1s2s3s4"}}],
+              []}
+Runnable = [], Receivable = []
+%% Bummer again
+Emitted counters = ["9.s1s2s3s4","10.s1s2s3s4"]
+per_client_not_retro: failed
+false

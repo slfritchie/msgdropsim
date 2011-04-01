@@ -1,0 +1,242 @@
+NOTE: Search for %% for hints on what to look for when something goes wrong.
+
+Difference with distrib_counter_bad4_sim.erl:
+
+Protocol #4 was also quite easily broken, so this protocol, #5, tries
+a different approach.
+
+The #5 client uses a 2-phase approach.  Phase 1 is the same as
+protocol #4, and the client uses protocol #1's integer method for
+calculating its value V.
+
+In phase 2, the client tells each server that it had calculated V with
+a {maybe_set_counter, V} message.  When the server receives a
+{maybe_set_counter message,...}, it will update its counter to be the
+maximum of V and the server's current counter value.
+
+Summary: This protocol is also broken, though sometimes it can pass
+         100 test cases without failing.  All it takes is a single
+         partition that causes two dropped messages.
+
+         Naively adding a 2nd phase to a protocol to fix a 1st phase
+         does not guarantee success.
+
+         In later exploration with this same protocol #5, I see that
+         it's indeed possible for the protocol to fail even when only
+         a single message is dropped ... and that message is a *1st
+         phase* message, e.g. {incr_counter_reply,s2,2} ... so the 2nd
+         phase doesn't actually help at all!)
+
+         Actually, it's also possible for the protocol to fail the
+         emits_unique property without any dropped messages at all!
+         I'll include that counterexample after the first one.
+
+Shrinking............(12 times)
+%% 1 client, 2 servers, 1 key (ignored)
+{1,2,1}
+%% Two ops by the same client
+{[{c1,{counter_op,[s1,s2]}},{c1,{counter_op,[s1,s2]}}],
+ [{c1,[],#Fun<distrib_counter_bad5_sim.6.52918649>}],
+%% Server s1 starts with counter = 0
+%% Server s2 starts with counter = 1
+ [{s1,0,#Fun<distrib_counter_bad5_sim.5.5305677>},
+  {s2,1,#Fun<distrib_counter_bad5_sim.5.5305677>}],
+ [s2,s1,c1],
+%% There is a unidirectional partition c1 -> s2 from sim time 1-11.
+%% This causes two dropped messages:
+%%               {drop,8,c1,s2,{maybe_set_counter,1}}, ... at sim time = 8
+%%               {drop,11,c1,s2,{incr_counter,c1}},    ... at sim time = 11
+ [{partition,[c1],[s2],1,11}]}
+Failed:
+F1 = {1,2,1}
+F2 = {[{c1,{counter_op,[s1,s2]}},{c1,{counter_op,[s1,s2]}}],
+      [{c1,[],#Fun<distrib_counter_bad5_sim.6.52918649>}],
+      [{s1,0,#Fun<distrib_counter_bad5_sim.5.5305677>},
+       {s2,1,#Fun<distrib_counter_bad5_sim.5.5305677>}],
+      [s2,s1,c1],
+      [{partition,[c1],[s2],1,11}]}
+End2 = {sched,21,9,
+              [s2,s1,c1],
+              [],
+              [{c1,{proc,c1,unused,[],
+                         {[],[]},
+                         {[],[]},
+                         delayed,#Fun<distrib_counter_bad5_sim.6.52918649>,
+                         undefined}},
+               {s1,{proc,s1,2,[],
+                         {[],[]},
+                         {[],[]},
+                         mbox,#Fun<distrib_counter_bad5_sim.5.5305677>,
+                         undefined}},
+               {s2,{proc,s2,2,[],
+                         {[],[]},
+                         {[],[]},
+                         mbox,#Fun<distrib_counter_bad5_sim.5.5305677>,
+                         undefined}}],
+%% Here's the system trace, in reverse order.
+              [{recv,20,c1,s2,{maybe_set_counter,1}},
+               {deliver,19,c1,s2,{maybe_set_counter,1}},
+               {recv,18,c1,s1,{maybe_set_counter,1}},
+               {deliver,17,c1,s1,{maybe_set_counter,1}},
+               {bang,16,c1,s2,{maybe_set_counter,1}},
+               {bang,16,c1,s1,{maybe_set_counter,1}},
+%% Here's a timeout
+               {recv,16,scheduler,c1,timeout},
+               {recv,15,s1,c1,{incr_counter_reply,s1,1}},
+               {deliver,14,s1,c1,{incr_counter_reply,s1,1}},
+               {bang,13,s1,c1,{incr_counter_reply,s1,1}},
+               {recv,13,c1,s1,{incr_counter,c1}},
+               {deliver,12,c1,s1,{incr_counter,c1}},
+%% Here's dropped message #2
+               {drop,11,c1,s2,{incr_counter,c1}},
+               {bang,11,c1,s1,{incr_counter,c1}},
+               {recv,11,scheduler,c1,{counter_op,[s1,s2]}},
+               {recv,10,c1,s1,{maybe_set_counter,1}},
+               {deliver,9,c1,s1,{maybe_set_counter,1}},
+%% Here's dropped message #1
+               {drop,8,c1,s2,{maybe_set_counter,1}},
+               {bang,8,c1,s1,{maybe_set_counter,1}},
+               {recv,8,s2,c1,{incr_counter_reply,s2,1}},
+               {deliver,7,s2,c1,{incr_counter_reply,s2,1}},
+               {recv,6,s1,c1,{incr_counter_reply,s1,0}},
+               {deliver,5,s1,c1,{incr_counter_reply,s1,0}},
+               {bang,4,s2,c1,{incr_counter_reply,s2,1}},
+               {recv,4,c1,s2,{incr_counter,c1}},
+               {deliver,3,c1,s2,{incr_counter,c1}},
+               {bang,2,s1,c1,{incr_counter_reply,s1,0}},
+               {recv,2,c1,s1,{incr_counter,c1}},
+               {deliver,1,c1,s1,{incr_counter,c1}},
+               {bang,0,c1,s2,{incr_counter,c1}},
+               {bang,0,c1,s1,{incr_counter,c1}},
+               {recv,0,scheduler,c1,{counter_op,[s1,s2]}}],
+              [{c1,16,{counter,1}},{c1,8,{counter,1}}],
+              [{{c1,s2},[1,2,3,4,5,6,7,8,9,10,11]}]}
+Runnable = [], Receivable = []
+%% Bummer.
+Emitted counters = [1,1]
+emits_unique: failed
+per_client_not_retro: failed
+false
+
+--------------------------------------------------------
+
+Shrinking.......(7 times)
+%% 2 clients, 3 servers, 1 key (ignored)
+{2,3,1}
+%% 2 ops, executed by 2 different clients
+{[{c2,{counter_op,[s1,s2,s3]}},{c1,{counter_op,[s1,s2,s3]}}],
+ [{c1,[],#Fun<distrib_counter_bad5_sim.6.52918649>},
+  {c2,[],#Fun<distrib_counter_bad5_sim.6.52918649>}],
+ [{s1,0,#Fun<distrib_counter_bad5_sim.5.5305677>},
+  {s2,1,#Fun<distrib_counter_bad5_sim.5.5305677>},
+  {s3,1,#Fun<distrib_counter_bad5_sim.5.5305677>}],
+%% Scheduler isn't crazy
+ [s2,s3,s1,c2,c1],
+%% No effective partitions
+ [{partition,[],[],0,0}]}
+Failed:
+F1 = {2,3,1}
+F2 = {[{c2,{counter_op,[s1,s2,s3]}},{c1,{counter_op,[s1,s2,s3]}}],
+      [{c1,[],#Fun<distrib_counter_bad5_sim.6.52918649>},
+       {c2,[],#Fun<distrib_counter_bad5_sim.6.52918649>}],
+      [{s1,0,#Fun<distrib_counter_bad5_sim.5.5305677>},
+       {s2,1,#Fun<distrib_counter_bad5_sim.5.5305677>},
+       {s3,1,#Fun<distrib_counter_bad5_sim.5.5305677>}],
+      [s2,s3,s1,c2,c1],
+      [{partition,[],[],0,0}]}
+End2 = {sched,38,18,
+              [s2,s3,s1,c2,c1],
+              [],
+              [{c1,{proc,c1,unused,[],
+                         {[],[]},
+                         {[],[]},
+                         delayed,#Fun<distrib_counter_bad5_sim.6.52918649>,
+                         undefined}},
+               {c2,{proc,c2,unused,[],
+                         {[],[]},
+                         {[],[]},
+                         delayed,#Fun<distrib_counter_bad5_sim.6.52918649>,
+                         undefined}},
+               {s1,{proc,s1,2,[],
+                         {[],[]},
+                         {[],[]},
+                         outbox,#Fun<distrib_counter_bad5_sim.5.5305677>,
+                         undefined}},
+               {s2,{proc,s2,3,[],
+                         {[],[]},
+                         {[],[]},
+                         outbox,#Fun<distrib_counter_bad5_sim.5.5305677>,
+                         undefined}},
+               {s3,{proc,s3,3,[],
+                         {[],[]},
+                         {[],[]},
+                         outbox,#Fun<distrib_counter_bad5_sim.5.5305677>,
+                         undefined}}],
+              [{recv,37,c1,s3,{maybe_set_counter,2}},
+               {recv,36,c2,s3,{maybe_set_counter,2}},
+               {recv,35,c1,s2,{maybe_set_counter,2}},
+               {deliver,34,c1,s3,{maybe_set_counter,2}},
+               {deliver,33,c2,s3,{maybe_set_counter,2}},
+               {recv,32,c1,s1,{maybe_set_counter,2}},
+               {recv,31,c2,s2,{maybe_set_counter,2}},
+               {deliver,30,c1,s2,{maybe_set_counter,2}},
+               {deliver,29,c2,s2,{maybe_set_counter,2}},
+               {recv,28,c2,s1,{maybe_set_counter,2}},
+               {deliver,27,c1,s1,{maybe_set_counter,2}},
+               {deliver,26,c2,s1,{maybe_set_counter,2}},
+               {bang,25,c1,s3,{maybe_set_counter,2}},
+               {bang,25,c1,s2,{maybe_set_counter,2}},
+               {bang,25,c1,s1,{maybe_set_counter,2}},
+               {recv,25,s2,c1,{incr_counter_reply,s2,2}},
+               {bang,24,c2,s3,{maybe_set_counter,2}},
+               {bang,24,c2,s2,{maybe_set_counter,2}},
+               {bang,24,c2,s1,{maybe_set_counter,2}},
+               {recv,24,s3,c2,{incr_counter_reply,s3,2}},
+               {deliver,23,s3,c2,{incr_counter_reply,s3,2}},
+               {recv,22,s1,c1,{incr_counter_reply,s1,1}},
+               {bang,21,s3,c2,{incr_counter_reply,s3,2}},
+               {recv,21,c2,s3,{incr_counter,c2}},
+               {deliver,20,s2,c1,{incr_counter_reply,s2,2}},
+               {recv,19,s3,c1,{incr_counter_reply,s3,1}},
+               {deliver,18,c2,s3,{incr_counter,c2}},
+               {deliver,17,s1,c1,{incr_counter_reply,s1,1}},
+               {deliver,16,s3,c1,{incr_counter_reply,s3,1}},
+               {bang,15,s2,c1,{incr_counter_reply,s2,2}},
+               {recv,15,c1,s2,{incr_counter,c1}},
+               {recv,14,s2,c2,{incr_counter_reply,s2,1}},
+               {bang,13,s1,c1,{incr_counter_reply,s1,1}},
+               {recv,13,c1,s1,{incr_counter,c1}},
+               {bang,12,s3,c1,{incr_counter_reply,s3,1}},
+               {recv,12,c1,s3,{incr_counter,c1}},
+               {deliver,11,s2,c2,{incr_counter_reply,s2,1}},
+               {deliver,10,c1,s3,{incr_counter,c1}},
+               {recv,9,s1,c2,{incr_counter_reply,s1,0}},
+               {deliver,8,s1,c2,{incr_counter_reply,s1,0}},
+               {bang,7,s2,c2,{incr_counter_reply,s2,1}},
+               {recv,7,c2,s2,{incr_counter,c2}},
+               {deliver,6,c1,s2,{incr_counter,c1}},
+               {deliver,5,c2,s2,{incr_counter,c2}},
+               {bang,4,s1,c2,{incr_counter_reply,s1,0}},
+               {recv,4,c2,s1,{incr_counter,c2}},
+               {deliver,3,c1,s1,{incr_counter,c1}},
+               {deliver,2,c2,s1,{incr_counter,c2}},
+               {bang,1,c1,s3,{incr_counter,c1}},
+               {bang,1,c1,s2,{incr_counter,c1}},
+               {bang,1,c1,s1,{incr_counter,c1}},
+               {recv,1,scheduler,c1,{counter_op,[s1,s2,s3]}},
+               {bang,0,c2,s3,{incr_counter,c2}},
+               {bang,0,c2,s2,{incr_counter,c2}},
+               {bang,0,c2,s1,{incr_counter,c2}},
+               {recv,0,scheduler,c2,{counter_op,[s1,s2,s3]}}],
+%% Here are the duplicate counters.  They're emitted at nearly the
+%% same "wall clock" time.  But it's just a matter of scheduler
+%% interleaving that causes the duplicate counters.
+              [{c1,25,{counter,2}},{c2,24,{counter,2}}],
+              []}
+Runnable = [], Receivable = []
+%% Bummer: dupes without any dropped messages.
+Emitted counters = [2,2]
+1st phase msg drops = []
+2nd phase msg drops = []
+emits_unique: failed
+false

@@ -1,0 +1,100 @@
+NOTE: Search for %% for hints on what to look for when something goes wrong.
+
+Difference with distrib_counter_bad3_sim.erl:
+
+The previous flawed protocol, #3, showed that converting to actual
+floating point numbers is sufficient for correctly ordering the output
+for cases like "9.something" -> "10.something".
+
+Summary: Protocol #4 does not prevent counters going backward, even
+         when we consider only the lefthand side of a floating point
+         number.  We change the verification of the model to truncate
+         each float and check for retrograde results seen by each
+         client.  Counterexample = Emitted counters = [2.21,1.2]
+
+So, the whole notion of having a client emit a floating point number
+to handle a "tie" really doesn't work.
+
+(rk@sbb)174> eqc:quickcheck(slf_msgsim_qc:prop_simulate(distrib_counter_bad4_sim, [])).
+%% I'm going to show only the shrunken case from now on....
+[...]
+Runnable = [], Receivable = []
+Emitted counters = [42.21,6.2]
+runnable: passed
+ops_finish: passed
+emits_unique: passed
+%% Here's the problem
+per_client_not_retro: failed
+%% Hooray, I love shrinking...
+Shrinking............(12 times)
+%% 1 client, 2 servers, 1 key (ignored)
+{1,2,1}
+{[{c1,{counter_op,[s1,s2]}},{c1,{counter_op,[s1,s2]}}],
+ [{c1,[],#Fun<distrib_counter_bad4_sim.6.52918649>}],
+%% Server s1 starts with counter = 2.
+%% Server s2 starts with counter = 0.
+ [{s1,2,#Fun<distrib_counter_bad4_sim.5.5305677>},
+  {s2,0,#Fun<distrib_counter_bad4_sim.5.5305677>}],
+%% Schedule isn't crazy
+ [s2,s1,c1],
+%% One bi-directional partition c1<->s1 between simulated time 3-9.
+%% The net effect is that a message is dropped at sim time = 9 from c1 -> s1.
+%%                {drop,9,c1,s1,{incr_counter,c1}},
+ [{partition,[c1],[s1],3,9},{partition,[s1],[c1],3,9}]}
+Failed:
+F1 = {1,2,1}
+F2 = {[{c1,{counter_op,[s1,s2]}},{c1,{counter_op,[s1,s2]}}],
+      [{c1,[],#Fun<distrib_counter_bad4_sim.6.52918649>}],
+      [{s1,2,#Fun<distrib_counter_bad4_sim.5.5305677>},
+       {s2,0,#Fun<distrib_counter_bad4_sim.5.5305677>}],
+      [s2,s1,c1],
+      [{partition,[c1],[s1],3,9},{partition,[s1],[c1],3,9}]}
+End2 = {sched,15,6,
+              [s2,s1,c1],
+              [],
+              [{c1,{proc,c1,unused,[],
+                         {[],[]},
+                         {[],[]},
+                         outbox,#Fun<distrib_counter_bad4_sim.6.52918649>,
+                         undefined}},
+               {s1,{proc,s1,3,[],
+                         {[],[]},
+                         {[],[]},
+                         delayed,#Fun<distrib_counter_bad4_sim.5.5305677>,
+                         undefined}},
+               {s2,{proc,s2,2,[],
+                         {[],[]},
+                         {[],[]},
+                         delayed,#Fun<distrib_counter_bad4_sim.5.5305677>,
+                         undefined}}],
+%% Here's the system trace, in reverse order.  Here's the timeout...
+              [{recv,14,scheduler,c1,timeout},
+               {recv,13,s2,c1,{incr_counter_reply,s2,1}},
+               {deliver,12,s2,c1,{incr_counter_reply,s2,1}},
+               {bang,11,s2,c1,{incr_counter_reply,s2,1}},
+               {recv,11,c1,s2,{incr_counter,c1}},
+               {deliver,10,c1,s2,{incr_counter,c1}},
+               {bang,9,c1,s2,{incr_counter,c1}},
+%%% ... and here's the dropped message that creates the timeout @ sim time = 14
+               {drop,9,c1,s1,{incr_counter,c1}},
+               {recv,9,scheduler,c1,{counter_op,[s1,s2]}},
+               {recv,8,s2,c1,{incr_counter_reply,s2,0}},
+               {deliver,7,s2,c1,{incr_counter_reply,s2,0}},
+               {recv,6,s1,c1,{incr_counter_reply,s1,2}},
+               {deliver,5,s1,c1,{incr_counter_reply,s1,2}},
+               {bang,4,s2,c1,{incr_counter_reply,s2,0}},
+               {recv,4,c1,s2,{incr_counter,c1}},
+               {deliver,3,c1,s2,{incr_counter,c1}},
+               {bang,2,s1,c1,{incr_counter_reply,s1,2}},
+               {recv,2,c1,s1,{incr_counter,c1}},
+               {deliver,1,c1,s1,{incr_counter,c1}},
+               {bang,0,c1,s2,{incr_counter,c1}},
+               {bang,0,c1,s1,{incr_counter,c1}},
+               {recv,0,scheduler,c1,{counter_op,[s1,s2]}}],
+%% Here's the user trace, in reverse order.
+              [{c1,14,{counter,1.2}},{c1,8,{counter,2.21}}],
+              [{{c1,s1},[3,4,5,6,7,8,9]},{{s1,c1},[3,4,5,6,7,8,9]}]}
+Runnable = [], Receivable = []
+Emitted counters = [2.21,1.2]
+per_client_not_retro: failed
+false

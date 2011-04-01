@@ -1,0 +1,225 @@
+%%%-------------------------------------------------------------------
+%%% @author Scott Lystig Fritchie <fritchie@snookles.com>
+%%% @copyright (C) 2011, Scott Lystig Fritchie
+%%% @doc
+%%%
+%%% @end
+%%% Created : 11 Feb 2011 by Scott Lystig Fritchie <fritchie@snookles.com>
+%%%-------------------------------------------------------------------
+
+-module(slf_msgsim_qc).
+
+-compile(export_all).
+
+-include_lib("eqc/include/eqc.hrl").
+
+%%% Generators
+
+gen_scheduler_list(NumClients, NumServers) ->
+    Clients = lists:sublist(all_clients(), 1, NumClients),
+    Servers = lists:sublist(all_servers(), 1, NumServers),
+    Both = Clients ++ Servers,
+    ?LET({L1, SlowProcs, Seed},
+         {list(elements(Both)),
+          frequency([{4, []},
+                     {1, non_empty(list(elements(Both)))}]),
+          gen_seed()},
+         begin
+             L2 = lists:foldl(fun(Slow, L) ->
+                                      delete_all(Slow, L)
+                              end, L1, SlowProcs),
+             Missing = [Proc || Proc <- Both,
+                                not lists:member(Proc, L2)],
+             L2 ++ shuffle(Missing, Seed)
+         end).
+
+gen_server_partitions(NumClients, NumServers) ->
+    ?LET(Parts, non_empty(list(gen_partition(NumClients, NumServers))),
+         lists:flatten(Parts)).
+
+gen_partition(NumClients, NumServers) ->
+    Clients = lists:sublist(all_clients(), 1, NumClients),
+    Servers = lists:sublist(all_servers(), 1, NumServers),
+    ?LET({Direction, Clnts, Svrs, Start, Len},
+         {oneof([s_to_c, c_to_s, both]),
+          list(elements(Clients)), list(elements(Servers)),
+          gen_nat_nat2(10, 1), gen_nat_nat2(30, 1)},
+         case Direction of
+             s_to_c ->
+                 [{partition, Clnts, Svrs, Start, Start + Len}];
+             c_to_s ->
+                 [{partition, Svrs, Clnts, Start, Start + Len}];
+             both ->
+                 [{partition, Clnts, Svrs, Start, Start + Len},
+                  {partition, Svrs, Clnts, Start, Start + Len}]
+         end).
+
+gen_nat_nat2(A, B) ->
+    frequency([{A, nat()},
+               {B, ?LET({X,Y}, {nat(), nat()}, (X+1)*(Y+1))}]).
+
+gen_seed() ->
+    noshrink({largeint(), largeint(), largeint()}).
+
+gen_initial_counter() ->
+    frequency([{10, 1},
+               {10, nat()},
+               { 1, ?LET({X, Y},
+                         {nat(), nat()},
+                         X * Y)}]).
+
+shuffle(L, Seed) ->
+    random:seed(Seed),
+    lists:sort(fun(_, _) -> random:uniform(100) < 50 end, L).
+
+apply_msg_drops(Rpcs, DropList) ->
+    NumRpcs = length(Rpcs),
+    T = lists:foldl(fun({drop, Nth, c_to_s}, DT) when Nth =< NumRpcs ->
+                            RPC = element(Nth, DT),
+                            setelement(Nth, DT,
+                                       filter_drop(RPC, {drop_noop, RPC}));
+                       ({drop, Nth, s_to_c}, DT)  when Nth =< NumRpcs ->
+                            RPC = element(Nth, DT),
+                            setelement(Nth, DT,
+                                       filter_drop(RPC, {drop_reply, RPC}));
+                       (_, DT) ->
+                            DT
+                    end, list_to_tuple(Rpcs), DropList),
+    tuple_to_list(T).
+
+filter_drop({_, _, sched_barrier} = Old, _New) ->
+    Old;
+filter_drop(_Old, New) ->
+    New.
+
+delete_all(X, L) ->
+    [Y || Y <- L, Y /= X].
+
+apply_net_partitions(Rpcs, PartitionList) ->
+    NumRpcs = length(Rpcs),
+    lists:flatten(
+      [
+       [{drop, N, Type} || N <- lists:seq(StartN, EndN),
+                             N < NumRpcs,
+                             {_, _, rpc, ask, Svr, _} <- [lists:nth(N, Rpcs)],
+                             Svr == Server]
+       || {partition, Server, StartN, EndN, Type} <- PartitionList]).
+
+counters_to_floats(Counters) ->
+    Counters2 = [re:replace(C, "[^0-9.]", "0", [global, {return,list}]) ||
+                    C <- Counters],
+    [list_to_float(C) || C <- Counters2].
+
+%% Very strict:
+%% counters_are_increasing(Floats) ->
+%%     Floats == lists:sort(Floats).
+
+counters_are_increasing(Floats) ->
+    try
+        lists:foldl(fun(N, Last) ->
+                            true = (trunc(N) >= Last),
+                            trunc(N)
+                    end, -9999999999999, Floats),
+        true
+    catch _:_ ->
+            false
+    end.
+                        
+%%% Protocols to test
+
+%% proto 1: Known to be flawed: ask each server for its counter, then
+%%          choose the max of all responses.  The servers are naive
+%%          and are not keeping per-key counters but rather a single
+%%          counter for the entire server.
+
+counter_client1({counter_op, Key, Servers}, _St) ->
+    [slf_msgsim:bang(Server, {incr_counter, Key, slf_msgsim:self()}) ||
+        Server <- Servers],
+    {recv_timeout, fun counter_client1_reply/2, {Servers, Servers, []}}.
+
+counter_client1_reply({incr_counter_reply, Server, Count},
+                      {AllServers, Waiting, Replies})->
+    Replies2 = [{Server, Count}|Replies],
+    case Waiting -- [Server] of
+        [] ->
+            Val = make_val(AllServers, Replies2),
+            slf_msgsim:add_utrace({counter, Val}),
+            {recv_general, same, unused};
+        Waiting2 ->
+            {recv_timeout, same, {AllServers, Waiting2, Replies2}}
+    end;
+counter_client1_reply(timeout, {AllServers, Waiting, Replies}) ->
+    Val = if length(Waiting) > length(Replies) ->
+                  timeout;
+             true ->
+                  make_val(AllServers, Replies)
+          end,
+    slf_msgsim:add_utrace({counter, Val}),
+    {recv_general, same, unused}.
+
+counter_server1({incr_counter, _Key, From}, Count) ->
+    slf_msgsim:bang(From, {incr_counter_reply, slf_msgsim:self(), Count}),
+    {recv_general, same, Count + 1}.
+
+make_val(AllServers, Replies) ->
+    Ns = [N || {_Server, N} <- Replies],
+    ByN = lists:sort([{N, Server} || {Server, N} <- Replies]),
+    SvrOrder = [Server || {_N, Server} <- ByN],
+    LHS_int = lists:max(Ns),
+    Left = integer_to_list(LHS_int),
+    Right = make_suffix(AllServers, SvrOrder),
+    Left ++ "." ++ Right.
+
+make_suffix(AllServers, ReplyServers) ->
+    lists:append(make_suffix2(AllServers, ReplyServers)).
+
+make_suffix2(AllServers, ReplyServers) ->
+    Padding = ["__" || _ <- lists:seq(1, length(AllServers) - length(ReplyServers))],
+    [atom_to_list(Svr) || Svr <- ReplyServers] ++ Padding.
+
+check_exact_msg_or_timeout(Clients, Predicted, Actual) ->
+    lists:all(
+      fun(Client) ->
+              Pred = proplists:get_value(Client, Predicted),
+              Act = proplists:get_value(Client, Actual),
+              lists:all(fun({X, X}) ->               true;
+                           ({_X, server_timeout}) -> true;
+                           (_)                    ->  false
+                        end, lists:zip(Pred, Act))
+      end, Clients).                                
+
+prop_simulate(Module, ModProps) ->
+    MaxClients = proplists:get_value(max_clients, ModProps, 5),
+    MaxServers = proplists:get_value(max_servers, ModProps, 5),
+    MaxKeys = proplists:get_value(max_keys, ModProps, 1),
+    ?FORALL({NumClients, NumServers, NumKeys} = F1,
+            {choose(1, MaxClients),
+             choose(1, MaxServers),
+             choose(1, MaxKeys)},
+    ?FORALL({Ops, ClientInits, ServerInits, SchedList, PartitionList} = F2,
+            {Module:gen_initial_ops(NumClients, NumServers, NumKeys, ModProps),
+             Module:gen_client_initial_states(NumClients, ModProps),
+             Module:gen_server_initial_states(NumServers, ModProps),
+             gen_scheduler_list(NumClients, NumServers),
+             gen_server_partitions(NumClients, NumServers)},
+            begin
+                Sched0 = slf_msgsim:new_sim(ClientInits, ServerInits, Ops,
+                                            SchedList, PartitionList),
+                {Runnable, Sched1} = slf_msgsim:run_scheduler(Sched0),
+                Trc = slf_msgsim:get_trace(Sched1),
+                UTrc = slf_msgsim:get_utrace(Sched1),
+                Module:verify_property(NumClients, NumServers, ModProps,
+                                       F1, F2, Ops,
+                                       Sched0, Runnable, Sched1, Trc, UTrc)
+            end
+           )).
+
+all_clients() ->
+    [c1, c2, c3, c4, c5, c6, c7, c8, c9].
+
+all_servers() ->
+    [s1, s2, s3, s4, s5, s6, s7, s8, s9].
+
+all_keys() ->
+    [k1, k2, k3, k4, k5, k6, k7, k8, k9].
+

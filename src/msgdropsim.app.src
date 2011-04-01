@@ -1,0 +1,13 @@
+{application, msgdropsim,
+ [
+  {description, "Message dropping simulator"},
+  {vsn, "0.1.0"},
+  {registered, []},
+  {applications, [
+                  kernel,
+                  stdlib,
+                  sasl
+                 ]},
+  %% {mod, { msgdropsim_app, []}},
+  {env, []}
+ ]}.

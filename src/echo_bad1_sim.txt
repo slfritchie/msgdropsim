@@ -1,0 +1,151 @@
+33> eqc:quickcheck(slf_msgsim_qc:prop_simulate(echo_bad1_sim, [])).
+..................................................Failed! After 51 tests.
+{5,1,1}                           %% 5 Clients, 1 server, 1 key
+{[{c3,{echo_op,s1,13}},           %% 4 echo ops executed by 2 different clients
+  {c3,{echo_op,s1,-14}},
+  {c1,{echo_op,s1,15}},
+  {c3,{echo_op,s1,8}}],
+ [{c1,[],#Fun<echo_bad1_sim.5.45368517>},
+  {c2,[],#Fun<echo_bad1_sim.5.45368517>},
+  {c3,[],#Fun<echo_bad1_sim.5.45368517>},
+  {c4,[],#Fun<echo_bad1_sim.5.45368517>},
+  {c5,[],#Fun<echo_bad1_sim.5.45368517>}],
+ [{s1,{unused,s1},#Fun<echo_bad1_sim.4.12451426>}],
+ %% Scheduler isn't unfair: all procs listed once
+ [c2,c4,c4,c5,c1,s1,c3],        
+ %% There's a bidirectional partition between simulator steps 14 and 27.
+ %% Though not known at test case generation time, this simulation will
+ %% require 16 steps and therefore dropped messages are possible.
+ %% In fact, a message is indeed dropped at the very tail end of the test,
+ %% which in turn triggers a timeout.
+ [{partition,[c5,c5,c2,c3],[s1,s1,s1,s1],14,27},
+  {partition,[s1,s1,s1,s1],[c5,c5,c2,c3],14,27}]}
+Failed:
+F1 = {5,1,1}
+F2 = {[{c3,{echo_op,s1,13}},
+       {c3,{echo_op,s1,-14}},
+       {c1,{echo_op,s1,15}},
+       {c3,{echo_op,s1,8}}],
+      [{c1,[],#Fun<echo_bad1_sim.5.45368517>},
+       {c2,[],#Fun<echo_bad1_sim.5.45368517>},
+       {c3,[],#Fun<echo_bad1_sim.5.45368517>},
+       {c4,[],#Fun<echo_bad1_sim.5.45368517>},
+       {c5,[],#Fun<echo_bad1_sim.5.45368517>}],
+      [{s1,{unused,s1},#Fun<echo_bad1_sim.4.12451426>}],
+      [c2,c4,c4,c5,c1,s1,c3],
+      [{partition,[c5,c5,c2,c3],[s1,s1,s1,s1],14,27},
+       {partition,[s1,s1,s1,s1],[c5,c5,c2,c3],14,27}]}
+End = {sched,17,6,
+             [c2,c4,c4,c5,c1,s1,c3],
+             [],
+             [{c1,{proc,c1,
+                        [15],
+                        [],
+                        {[],[]},
+                        {[],[]},
+                        mbox,#Fun<echo_bad1_sim.5.45368517>,undefined}},
+              {c2,{proc,c2,[],[],
+                        {[],[]},
+                        {[],[]},
+                        mbox,#Fun<echo_bad1_sim.5.45368517>,undefined}},
+              {c3,{proc,c3,
+                        [server_timeout,13,13],
+                        [],
+                        {[],[]},
+                        {[],[]},
+                        delayed,#Fun<echo_bad1_sim.5.45368517>,undefined}},
+              {c4,{proc,c4,[],[],
+                        {[],[]},
+                        {[],[]},
+                        mbox,#Fun<echo_bad1_sim.5.45368517>,undefined}},
+              {c5,{proc,c5,[],[],
+                        {[],[]},
+                        {[],[]},
+                        mbox,#Fun<echo_bad1_sim.5.45368517>,undefined}},
+              {s1,{proc,s1,13,[],
+                        {[],[]},
+                        {[],[]},
+                        delayed,#Fun<echo_bad1_sim.4.12451426>,undefined}}],
+             [{recv,16,scheduler,c3,timeout},
+              {drop,15,c3,s1,{echo,c3,8}},
+              {recv,15,scheduler,c3,{echo_op,s1,8}},
+              {recv,14,s1,c3,{echo_reply,13}},
+              {deliver,13,s1,c3,{echo_reply,13}},
+              {bang,12,s1,c3,{echo_reply,13}},
+              {recv,12,c3,s1,{echo,c3,-14}},
+              {deliver,11,c3,s1,{echo,c3,-14}},
+              {bang,10,c3,s1,{echo,c3,-14}},
+              {recv,10,scheduler,c3,{echo_op,s1,-14}},
+              {recv,9,s1,c3,{echo_reply,13}},
+              {deliver,8,s1,c3,{echo_reply,13}},
+              {bang,7,s1,c3,{echo_reply,13}},
+              {recv,7,c3,s1,{echo,c3,13}},
+              {recv,6,s1,c1,{echo_reply,15}},
+              {deliver,5,s1,c1,{echo_reply,15}},
+              {deliver,4,c3,s1,{echo,c3,13}},
+              {bang,3,s1,c1,{echo_reply,15}},
+              {recv,3,c1,s1,{echo,c1,15}},
+              {deliver,2,c1,s1,{echo,c1,15}},
+              {bang,1,c3,s1,{echo,c3,13}},
+              {recv,1,scheduler,c3,{echo_op,s1,13}},
+              {bang,0,c1,s1,{echo,c1,15}},
+              {recv,0,scheduler,c1,{echo_op,s1,15}}],
+             [],
+             [{{c2,s1},[14,15,16,17,18,19,20,21,22,23,24,25,26,27]},
+              {{c3,s1},[14,15,16,17,18,19,20,21,22,23,24,25,26,27]},
+              {{c5,s1},[14,15,16,17,18,19,20,21,22,23,24,25,26,27]},
+              {{s1,c2},[14,15,16,17,18,19,20,21,22,23,24,25,26,27]},
+              {{s1,c3},[14,15,16,17,18,19,20,21,22,23,24,25,26,27]},
+              {{s1,c5},[14,15,16,17,18,19,20,21,22,23,24,25,26,27]}]}
+Runnable = [], Receivable = []
+Predicted [{c1,[15]},{c2,[]},{c3,[13,-14,8]},{c4,[]},{c5,[]}]
+Actual [{c1,[15]},{c2,[]},{c3,[13,13,server_timeout]},{c4,[]},{c5,[]}]
+runnable: passed
+all_ok: failed
+Shrinking.........(9 times)
+{1,1,1}                           %% One server, one client, one key
+{[{c1,{echo_op,s1,13}},{c1,{echo_op,s1,0}}],
+ [{c1,[],#Fun<echo_bad1_sim.5.45368517>}],
+ [{s1,{unused,s1},#Fun<echo_bad1_sim.4.12451426>}],
+ %% Simplest possible secheduler
+ [c1,s1],
+ %% No partitions (effectively)
+ [{partition,[],[],0,0},{partition,[],[],0,0}]}
+Failed:
+F1 = {1,1,1}
+F2 = {[{c1,{echo_op,s1,13}},{c1,{echo_op,s1,0}}],
+      [{c1,[],#Fun<echo_bad1_sim.5.45368517>}],
+      [{s1,{unused,s1},#Fun<echo_bad1_sim.4.12451426>}],
+      [c1,s1],
+      [{partition,[],[],0,0},{partition,[],[],0,0}]}
+End = {sched,10,4,
+             [c1,s1],
+             [],
+             [{c1,{proc,c1,"\r\r",[],
+                        {[],[]},
+                        {[],[]},
+                        mbox,#Fun<echo_bad1_sim.5.45368517>,undefined}},
+              {s1,{proc,s1,13,[],
+                        {[],[]},
+                        {[],[]},
+                        delayed,#Fun<echo_bad1_sim.4.12451426>,undefined}}],
+             [{recv,9,s1,c1,{echo_reply,13}},
+              {deliver,8,s1,c1,{echo_reply,13}},
+              {bang,7,s1,c1,{echo_reply,13}},
+              {recv,7,c1,s1,{echo,c1,0}},
+              {deliver,6,c1,s1,{echo,c1,0}},
+              {bang,5,c1,s1,{echo,c1,0}},
+              {recv,5,scheduler,c1,{echo_op,s1,0}},
+              {recv,4,s1,c1,{echo_reply,13}},
+              {deliver,3,s1,c1,{echo_reply,13}},
+              {bang,2,s1,c1,{echo_reply,13}},
+              {recv,2,c1,s1,{echo,c1,13}},
+              {deliver,1,c1,s1,{echo,c1,13}},
+              {bang,0,c1,s1,{echo,c1,13}},
+              {recv,0,scheduler,c1,{echo_op,s1,13}}],
+             [],[]}
+Runnable = [], Receivable = []
+Predicted [{c1,[13,0]}]
+Actual [{c1,[13,13]}]
+all_ok: failed
+false
