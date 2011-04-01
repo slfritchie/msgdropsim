@@ -73,6 +73,15 @@ How the simulator works
 
 TODO Finish this section
 
+The simulator attempts to maintain Erlang message passing semantics.
+Those semantics are not formally documented but can loosely be
+described as "send and pray", i.e. no guarantee that any message will
+be delivered.  In the case where process **X** sends messages `A` and
+`B` to process **Y**, if **Y** receives both messages `B` and `A`,
+then message `A` will be delivered before `B`.  (I hope I got that
+right ... if not, the Async Message Passing Police will come and
+arrest me.)
+
 * Write a callback module
   * `gen_initial_ops/4` The simulator scheduler sends messages from
      created by this generator to each of the simulated processes.
