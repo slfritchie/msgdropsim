@@ -22,6 +22,10 @@ Summary: Unfortunately, it doesn't work.  This time we found a
          counterexample where the lefthand side of the fake floating
          point number goes backward.
 
+% cd /path/to/top/of/msgdropsim
+% make
+% erl -pz ./ebin
+[...]
 (rk@sbb)100> eqc:quickcheck(slf_msgsim_qc:prop_simulate(distrib_counter_bad2_sim, [])).
 ...................Failed! After 20 tests.
 %% 5 clients, 3 servers, 1 key (ignored)

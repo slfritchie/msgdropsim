@@ -129,6 +129,7 @@ End = {sched,10,4,
                         {[],[]},
                         {[],[]},
                         delayed,#Fun<echo_bad1_sim.4.12451426>,undefined}}],
+%% This is the system trace list, in reverse order.
              [{recv,9,s1,c1,{echo_reply,13}},
               {deliver,8,s1,c1,{echo_reply,13}},
               {bang,7,s1,c1,{echo_reply,13}},
@@ -145,7 +146,9 @@ End = {sched,10,4,
               {recv,0,scheduler,c1,{echo_op,s1,13}}],
              [],[]}
 Runnable = [], Receivable = []
+%% Predicted results: client c1 will receive echoes 13 and 0
 Predicted [{c1,[13,0]}]
+%% Actual results: client c1 actually got echoes 13 and 13
 Actual [{c1,[13,13]}]
 all_ok: failed
 false

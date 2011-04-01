@@ -31,6 +31,11 @@ Summary: This protocol is also broken, though sometimes it can pass
          emits_unique property without any dropped messages at all!
          I'll include that counterexample after the first one.
 
+% cd /path/to/top/of/msgdropsim
+% make
+% erl -pz ./ebin
+(rk@sbb)174> eqc:quickcheck(slf_msgsim_qc:prop_simulate(distrib_counter_bad4_sim, [])).
+[...]
 Shrinking............(12 times)
 %% 1 client, 2 servers, 1 key (ignored)
 {1,2,1}

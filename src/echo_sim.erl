@@ -1,10 +1,40 @@
 %%%-------------------------------------------------------------------
-%%% @author Scott Lystig Fritchie <fritchie@snookles.com>
+%%% @author Scott Lystig Fritchie <slfritchie@snookles.com>
 %%% @copyright (C) 2011, Scott Lystig Fritchie
 %%% @doc
+%%% Echo server simulator (bug-free)
 %%%
+%%% $ cd /path/to/top/of/msgdropsim
+%%% $ make
+%%% $ erl -pz ./ebin
+%%% [...]
+%%% > eqc:quickcheck(slf_msgsim_qc:prop_simulate(echo_sim, [])).
+%%% ....................................................................................................
+%%% OK, passed 100 tests
+%%% 35% at_least_1_msg_dropped
+%%% clients     :    Count: 100    Min: 1    Max: 5    Avg: 3.36    Total: 336
+%%% servers     :    Count: 100    Min: 1    Max: 5    Avg: 2.93    Total: 293
+%%% echoes      :    Count: 100    Min: 0    Max: 11    Avg: 2.7    Total: 270
+%%% msgs sent   :    Count: 100    Min: 0    Max: 14    Avg: 3.64    Total: 364
+%%% msgs dropped:    Count: 100    Min: 0    Max: 10    Avg: 1.07    Total: 107
+%%% timeouts    :    Count: 100    Min: 0    Max: 10    Avg: 1.07    Total: 107
+%%% true
+%%% 
 %%% @end
-%%% Created : 26 Mar 2011 by Scott Lystig Fritchie <fritchie@snookles.com>
+%%%
+%%% This file is provided to you under the Apache License,
+%%% Version 2.0 (the "License"); you may not use this file
+%%% except in compliance with the License.  You may obtain
+%%% a copy of the License at
+%%%
+%%%   http://www.apache.org/licenses/LICENSE-2.0
+%%%
+%%% Unless required by applicable law or agreed to in writing,
+%%% software distributed under the License is distributed on an
+%%% "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+%%% KIND, either express or implied.  See the License for the
+%%% specific language governing permissions and limitations
+%%% under the License.
 %%%-------------------------------------------------------------------
 -module(echo_sim).
 
@@ -22,7 +52,7 @@ gen_echo_op(NumClients, NumServers) ->
     ?LET({ClientI, ServerI},
          {choose(1, NumClients), choose(1, NumServers)},
          {lists:nth(ClientI, all_clients()),
-          {echo_op, lists:nth(ServerI, all_servers()), make_ref()}}).
+          {echo_op, lists:nth(ServerI, all_servers()), int()}}).
 
 %% required
 gen_client_initial_states(NumClients, _Props) ->
@@ -48,7 +78,7 @@ verify_property(NumClients, NumServers, _Props, F1, F2, Ops,
     ?WHENFAIL(
        io:format("Failed:\nF1 = ~p\nF2 = ~p\nEnd = ~p\n"
                  "Runnable = ~p, Receivable = ~p\n"
-                 "Predicted ~p\nActual ~p\n",
+                 "Predicted ~w\nActual ~w\n",
                  [F1, F2, Sched1,
                   slf_msgsim:runnable_procs(Sched1),
                   slf_msgsim:receivable_procs(Sched1),
@@ -79,7 +109,7 @@ actual_echos(Clients, Sched) ->
 %%% Protocol implementation
 
 %% proto 1: An echo server.  Not interesting by itself, but hopefully
-%%           useful in figuring out how best to handle dropped packets
+%%           useful in figuring out how best to simulate dropped packets
 %%           and timeouts.
 
 echo_client1({echo_op, Server, Key}, ReplyList) ->
@@ -102,7 +132,3 @@ all_clients() ->
 
 all_servers() ->
     [s1, s2, s3, s4, s5, s6, s7, s8, s9].
-
-all_keys() ->
-    [k1, k2, k3, k4, k5, k6, k7, k8, k9].
-

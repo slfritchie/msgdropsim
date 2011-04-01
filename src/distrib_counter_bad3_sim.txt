@@ -23,6 +23,10 @@ Summary: Unfortunately, there's another problem: our fake floating
          counters in order of "9.something" and "10.something", which
          violates our strictly increasing property.
 
+% cd /path/to/top/of/msgdropsim
+% make
+% erl -pz ./ebin
+[...]
 (rk@sbb)114> eqc:quickcheck(slf_msgsim_qc:prop_simulate(distrib_counter_bad3_sim, [])).
 ...................................Failed! After 36 tests.
 %% 1 client, 4 servers, 1 key (ignored)

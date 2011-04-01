@@ -1,10 +1,26 @@
 %%%-------------------------------------------------------------------
-%%% @author Scott Lystig Fritchie <fritchie@snookles.com>
+%%% @author Scott Lystig Fritchie <slfritchie@snookles.com>
 %%% @copyright (C) 2011, Scott Lystig Fritchie
 %%% @doc
+%%% Echo server simulator (buggy)
 %%%
+%%% See usage example & discussion of simulator results in the file
+%%% echo_bad1_sim.txt.
 %%% @end
-%%% Created : 26 Mar 2011 by Scott Lystig Fritchie <fritchie@snookles.com>
+%%%
+%%% This file is provided to you under the Apache License,
+%%% Version 2.0 (the "License"); you may not use this file
+%%% except in compliance with the License.  You may obtain
+%%% a copy of the License at
+%%%
+%%%   http://www.apache.org/licenses/LICENSE-2.0
+%%%
+%%% Unless required by applicable law or agreed to in writing,
+%%% software distributed under the License is distributed on an
+%%% "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+%%% KIND, either express or implied.  See the License for the
+%%% specific language governing permissions and limitations
+%%% under the License.
 %%%-------------------------------------------------------------------
 -module(echo_bad1_sim).
 
@@ -110,7 +126,3 @@ all_clients() ->
 
 all_servers() ->
     [s1, s2, s3, s4, s5, s6, s7, s8, s9].
-
-all_keys() ->
-    [k1, k2, k3, k4, k5, k6, k7, k8, k9].
-

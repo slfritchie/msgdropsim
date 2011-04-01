@@ -2,6 +2,10 @@ NOTE: Search for %% for hints on what to look for when something goes wrong.
 
 Summary: Found an error: duplicate counters seen by the same client.
 
+% cd /path/to/top/of/msgdropsim
+% make
+% erl -pz ./ebin
+[...]
 (rk@sbb)75> eqc:quickcheck(eqc:numtests(100,slf_msgsim_qc:prop_simulate(distrib_counter_bad1_sim, []))).
 .......................Failed! After 24 tests.
 %% 1 client, 2 servers, 1 key (ignored)
