@@ -28,9 +28,9 @@
 
 %%% Generators
 
-gen_scheduler_list(NumClients, NumServers) ->
-    Clients = lists:sublist(all_clients(), 1, NumClients),
-    Servers = lists:sublist(all_servers(), 1, NumServers),
+gen_scheduler_list(Module, NumClients, NumServers) ->
+    Clients = lists:sublist(Module:all_clients(), 1, NumClients),
+    Servers = lists:sublist(Module:all_servers(), 1, NumServers),
     Both = Clients ++ Servers,
     ?LET({L1, SlowProcs, Seed},
          {list(elements(Both)),
@@ -46,16 +46,16 @@ gen_scheduler_list(NumClients, NumServers) ->
              L2 ++ shuffle(Missing, Seed)
          end).
 
-gen_server_partitions(NumClients, NumServers) ->
-    ?LET(Parts, non_empty(list(gen_partition(NumClients, NumServers))),
+gen_server_partitions(Module, NumClients, NumServers) ->
+    ?LET(Parts, non_empty(list(gen_partition(Module, NumClients, NumServers))),
          lists:flatten(Parts)).
 
-gen_partition(NumClients, NumServers) ->
-    Clients = lists:sublist(all_clients(), 1, NumClients),
-    Servers = lists:sublist(all_servers(), 1, NumServers),
+gen_partition(Module, NumClients, NumServers) ->
+    Clients = lists:sublist(Module:all_clients(), 1, NumClients),
+    Servers = lists:sublist(Module:all_servers(), 1, NumServers),
     ?LET({Direction, Clnts, Svrs, Start, Len},
          {oneof([s_to_c, c_to_s, both]),
-          list(elements(Clients)), list(elements(Servers)),
+          my_list_elements(Clients), my_list_elements(Servers),
           gen_nat_nat2(10, 1), gen_nat_nat2(30, 1)},
          case Direction of
              s_to_c ->
@@ -206,15 +206,15 @@ prop_simulate(Module, ModProps) ->
     MaxServers = proplists:get_value(max_servers, ModProps, 5),
     MaxKeys = proplists:get_value(max_keys, ModProps, 1),
     ?FORALL({NumClients, NumServers, NumKeys} = F1,
-            {choose(1, MaxClients),
-             choose(1, MaxServers),
-             choose(1, MaxKeys)},
+            {my_choose(1, MaxClients),
+             my_choose(1, MaxServers),
+             my_choose(1, MaxKeys)},
     ?FORALL({Ops, ClientInits, ServerInits, SchedList, PartitionList} = F2,
             {Module:gen_initial_ops(NumClients, NumServers, NumKeys, ModProps),
              Module:gen_client_initial_states(NumClients, ModProps),
              Module:gen_server_initial_states(NumServers, ModProps),
-             gen_scheduler_list(NumClients, NumServers),
-             gen_server_partitions(NumClients, NumServers)},
+             gen_scheduler_list(Module, NumClients, NumServers),
+             gen_server_partitions(Module, NumClients, NumServers)},
             begin
                 Sched0 = slf_msgsim:new_sim(ClientInits, ServerInits, Ops,
                                             SchedList, PartitionList),
@@ -227,12 +227,13 @@ prop_simulate(Module, ModProps) ->
             end
            )).
 
-all_clients() ->
-    [c1, c2, c3, c4, c5, c6, c7, c8, c9].
+my_choose(_, 0) ->
+    0;
+my_choose(N, M) ->
+    choose(N, M).
 
-all_servers() ->
-    [s1, s2, s3, s4, s5, s6, s7, s8, s9].
-
-all_keys() ->
-    [k1, k2, k3, k4, k5, k6, k7, k8, k9].
+my_list_elements([]) ->
+    [];
+my_list_elements(L) ->
+    list(elements(L)).
 
