@@ -235,7 +235,8 @@ consume_scheduler_token(P = #proc{mbox = Mbox, outbox = Outbox,
         outbox when OutNotEmpty ->
             {{value, IMsg}, Q2} = queue:out(P#proc.outbox),
             NewS = deliver_msg(IMsg, S),
-            store_proc(rotate_next_type(P#proc{outbox = Q2}), incr_step(NewS));
+            P2 = fetch_proc(P#proc.name, NewS),
+            store_proc(rotate_next_type(P2#proc{outbox = Q2}), incr_step(NewS));
         delayed when DelayedNotEmpty ->
             %% TODO: Implement message delays.  N.B. message ordering
             %%       between pairs of recipients should be respected
