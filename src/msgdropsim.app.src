@@ -5,8 +5,7 @@
   {registered, []},
   {applications, [
                   kernel,
-                  stdlib,
-                  sasl
+                  stdlib
                  ]},
   %% {mod, { msgdropsim_app, []}},
   {env, []}
