@@ -74,10 +74,6 @@ run_it(MaxServers, NumTests) ->
     io:format("NOTE: This algorithm cannot tolerate dropped messages, so\n"
               "      'disable_partitions' is a required option for good behavior.\n").
 
-recheck(MaxServers, CounterExample) ->
-    Props =  [{max_servers, MaxServers}, {max_clients, 0}],
-    eqc:check(slf_msgsim_qc:prop_simulate(?MODULE, Props), CounterExample).
-
 %%% Generators
 
 %% required
