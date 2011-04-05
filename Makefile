@@ -12,5 +12,5 @@ clean:
 distclean: clean
 	./rebar delete-deps
 
-test:
+eunit test:
 	./rebar skip_deps=true eunit
