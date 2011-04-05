@@ -46,25 +46,32 @@ gen_scheduler_list(Module, NumClients, NumServers) ->
              L2 ++ shuffle(Missing, Seed)
          end).
 
-gen_server_partitions(Module, NumClients, NumServers) ->
-    ?LET(Parts, non_empty(list(gen_partition(Module, NumClients, NumServers))),
-         lists:flatten(Parts)).
+gen_server_partitions(Module, ModProps, NumClients, NumServers) ->
+    case proplists:get_value(disable_partitions, ModProps, false) of
+        true ->
+            [];
+        false ->
+            ?LET(Parts,
+                 non_empty(list(gen_partition(Module, NumClients, NumServers))),
+                 lists:flatten(Parts))
+    end.
 
 gen_partition(Module, NumClients, NumServers) ->
     Clients = lists:sublist(Module:all_clients(), 1, NumClients),
     Servers = lists:sublist(Module:all_servers(), 1, NumServers),
-    ?LET({Direction, Clnts, Svrs, Start, Len},
+    Both = Clients ++ Servers,
+    ?LET({Direction, Froms, Tos, Start, Len},
          {oneof([s_to_c, c_to_s, both]),
-          my_list_elements(Clients), my_list_elements(Servers),
+          my_list_elements(Both), my_list_elements(Both),
           gen_nat_nat2(10, 1), gen_nat_nat2(30, 1)},
          case Direction of
              s_to_c ->
-                 [{partition, Clnts, Svrs, Start, Start + Len}];
+                 [{partition, Froms, Tos, Start, Start + Len}];
              c_to_s ->
-                 [{partition, Svrs, Clnts, Start, Start + Len}];
+                 [{partition, Tos, Froms, Start, Start + Len}];
              both ->
-                 [{partition, Clnts, Svrs, Start, Start + Len},
-                  {partition, Svrs, Clnts, Start, Start + Len}]
+                 [{partition, Froms, Tos, Start, Start + Len},
+                  {partition, Tos, Froms, Start, Start + Len}]
          end).
 
 gen_nat_nat2(A, B) ->
@@ -214,7 +221,7 @@ prop_simulate(Module, ModProps) ->
              Module:gen_client_initial_states(NumClients, ModProps),
              Module:gen_server_initial_states(NumServers, ModProps),
              gen_scheduler_list(Module, NumClients, NumServers),
-             gen_server_partitions(Module, NumClients, NumServers)},
+             gen_server_partitions(Module, ModProps, NumClients, NumServers)},
             begin
                 Sched0 = slf_msgsim:new_sim(ClientInits, ServerInits, Ops,
                                             SchedList, PartitionList),
