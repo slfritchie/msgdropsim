@@ -2,9 +2,11 @@
 %%% @author Scott Lystig Fritchie <slfritchie@snookles.com>
 %%% @copyright (C) 2011, Scott Lystig Fritchie
 %%% @doc
+%%%
 %%% Simulation of the LCR leader election algorithm by Le Lann, Chang,
 %%% and Roberts as presented in Nancy Lynch's _Distributed Algorithms_,
-%%% pp. 27-31.
+%%% pp. 27-31.  To be nitpicky, it's more accurate to say that this
+%%% simulation emulates the AsyncLCR automaton on p. 477.
 %%%
 %%% Differences between this implementation and the Lynch's presentation:
 %%%
@@ -30,6 +32,16 @@
 %%%
 %%%    The use of these two implementation functions is similar to the
 %%%    Erlang/OTP coding style that uses the 'gen_fsm' behavior.
+%%%
+%%%    NOTE: This receive-before-first-computation pattern is,
+%%%          coincidentally, exactly what's described in the 'Wakeups'
+%%%          paragraph at the bottom of p. 481.
+%%%
+%%% 3. When run with the 'disable_partitions' option, the simulation is
+%%%    run with reliable FIFO queues as communication channels: messages
+%%%    are not corrupted, are not lost, are delivered in-order, and are
+%%%    delivered without duplication.  (See the top of p. 460 for formal
+%%%    and informal definitions of these four criteria.)
 %%%
 %%% @end
 %%%
