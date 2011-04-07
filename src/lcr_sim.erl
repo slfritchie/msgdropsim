@@ -108,8 +108,21 @@ gen_server_initial_states(NumServers, _Props) ->
 %%% Verify our properties
 
 %% required
-verify_property(_NumClients, NumServers, _Props, F1, F2, Ops,
+verify_property(_NumClients, NumServers, Props, F1, F2, Ops,
                 _Sched0, Runnable, Sched1, Trc, UTrc) ->
+    case proplists:get_value(show_traces, Props) of
+        undefined ->
+            ok;
+        N ->
+            case random:uniform(N) of
+                1 -> io:format("\nF1 = ~p\nF2 = ~p\nEnd = ~p\n"
+                               "Runnable = ~p, Receivable = ~p\n",
+                               [F1, F2, Sched1,
+                                slf_msgsim:runnable_procs(Sched1),
+                                slf_msgsim:receivable_procs(Sched1)]);
+                _ -> ok
+            end
+    end,
     NumMsgs = length([x || {bang,_,_,_,_} <- Trc]),
     NumDrops = length([x || {drop,_,_,_,_} <- Trc]),
     NumTimeouts = length([x || {recv,_,scheduler,_,timeout} <- Trc]),
@@ -121,14 +134,16 @@ verify_property(_NumClients, NumServers, _Props, F1, F2, Ops,
                   slf_msgsim:receivable_procs(Sched1)]),
        measure("servers     ", NumServers,
        measure("num ops     ", length(Ops),
+       measure("sim. steps  ", slf_msgsim:get_step(Sched1),
        measure("msgs sent   ", NumMsgs,
        classify(NumDrops /= 0, at_least_1_msg_dropped,
        measure("msgs dropped", NumDrops,
        measure("timeouts    ", NumTimeouts,
+       measure("len(tokens) ", length(slf_msgsim:get_tokens(Sched1)),
        begin
            conjunction([{runnable, Runnable == false},
                         {one_leader, one_leader_p(NumServers, UTrc)}])
-       end))))))).
+       end))))))))).
 
 one_leader_p(NumServers, [{Server, _Seq, {i_am_leader, Server}} = _X]) ->
     Nth = nth_server(NumServers - 1),
