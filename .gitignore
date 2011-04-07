@@ -1,3 +1,4 @@
 current_counterexample.eqc
 ebin/*.app
 ebin/*.beam
+.eunit
