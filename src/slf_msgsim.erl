@@ -260,6 +260,9 @@ get_utrace(S) ->
 get_step(S) ->
     S#sched.step.
 
+get_tokens(S) ->
+    S#sched.tokens.
+
 incr_numsent(#sched{numsent = NumSent} = S) ->
     S#sched{numsent = NumSent + 1}.
 
