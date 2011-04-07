@@ -209,13 +209,16 @@ check_exact_msg_or_timeout(Clients, Predicted, Actual) ->
       end, Clients).                                
 
 prop_simulate(Module, ModProps) ->
+    MinClients = proplists:get_value(min_clients, ModProps, 1),
     MaxClients = proplists:get_value(max_clients, ModProps, 5),
+    MinServers = proplists:get_value(min_servers, ModProps, 1),
     MaxServers = proplists:get_value(max_servers, ModProps, 5),
+    MinKeys = proplists:get_value(min_keys, ModProps, 1),
     MaxKeys = proplists:get_value(max_keys, ModProps, 1),
     ?FORALL({NumClients, NumServers, NumKeys} = F1,
-            {my_choose(1, MaxClients),
-             my_choose(1, MaxServers),
-             my_choose(1, MaxKeys)},
+            {my_choose(MinClients, MaxClients),
+             my_choose(MinServers, MaxServers),
+             my_choose(MinKeys, MaxKeys)},
     ?FORALL({Ops, ClientInits, ServerInits, SchedList, PartitionList} = F2,
             {Module:gen_initial_ops(NumClients, NumServers, NumKeys, ModProps),
              Module:gen_client_initial_states(NumClients, ModProps),
