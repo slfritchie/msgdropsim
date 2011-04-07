@@ -32,19 +32,27 @@ gen_scheduler_list(Module, NumClients, NumServers) ->
     Clients = lists:sublist(Module:all_clients(), 1, NumClients),
     Servers = lists:sublist(Module:all_servers(), 1, NumServers),
     Both = Clients ++ Servers,
-    ?LET({L1, SlowProcs, Seed},
+    ?LET({L1, UnfairL, SlowProcs, Seed},
          {list(elements(Both)),
+          gen_unfair_list(Both),
           frequency([{4, []},
                      {1, non_empty(list(elements(Both)))}]),
           gen_seed()},
          begin
              L2 = lists:foldl(fun(Slow, L) ->
                                       delete_all(Slow, L)
-                              end, L1, SlowProcs),
+                              end, UnfairL ++ L1, SlowProcs),
              Missing = [Proc || Proc <- Both,
                                 not lists:member(Proc, L2)],
              L2 ++ shuffle(Missing, Seed)
          end).
+
+gen_unfair_list(L) ->
+    frequency([{1, []},
+               {1, ?LET(SubL, non_empty(list(elements(L))),
+                        resize(80, list(elements(SubL))))},
+               {1, ?LET(SubL, non_empty(list(elements(L))),
+                        resize(500, list(elements(SubL))))}]).
 
 gen_server_partitions(Module, ModProps, NumClients, NumServers) ->
     case proplists:get_value(disable_partitions, ModProps, false) of
