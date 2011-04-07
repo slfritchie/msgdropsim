@@ -39,9 +39,8 @@ gen_scheduler_list(Module, NumClients, NumServers) ->
                      {1, non_empty(list(elements(Both)))}]),
           gen_seed()},
          begin
-             L2 = lists:foldl(fun(Slow, L) ->
-                                      delete_all(Slow, L)
-                              end, UnfairL ++ L1, SlowProcs),
+             L2 = lists:filter(fun(X) -> not lists:member(X, SlowProcs) end,
+                               UnfairL ++ L1),
              Missing = [Proc || Proc <- Both,
                                 not lists:member(Proc, L2)],
              L2 ++ shuffle(Missing, Seed)
