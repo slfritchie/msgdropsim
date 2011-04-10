@@ -142,6 +142,8 @@ Future work
   informing processes that messages may have been dropped.
 * Investigate integration of message dropping (and perhaps also
   message delaying?) with McErlang.
+* There's gotta be some cool opportunities for visualization and
+  animation in here....
 
 Contact the author
 ------------------
