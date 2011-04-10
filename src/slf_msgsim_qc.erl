@@ -2,7 +2,7 @@
 %%% @author Scott Lystig Fritchie <slfritchie@snookles.com>
 %%% @copyright (C) 2011, Scott Lystig Fritchie
 %%% @doc
-%%% QuickCheck foundations for the message passing & dropping simulator.
+%%% QuickCheck foundations for the message passing &amp; dropping simulator.
 %%% @end
 %%%
 %%% This file is provided to you under the Apache License,

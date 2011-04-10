@@ -4,7 +4,7 @@
 %%% @doc
 %%% Distributed strictly increasing counter simulation, #2 (buggy)
 %%%
-%%% See usage example & discussion of simulator results in the file
+%%% See usage example and discussion of simulator results in the file
 %%% distrib_counter_bad2_sim.txt.
 %%% @end
 %%%

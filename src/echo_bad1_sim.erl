@@ -4,7 +4,7 @@
 %%% @doc
 %%% Echo server simulator (buggy)
 %%%
-%%% See usage example & discussion of simulator results in the file
+%%% See usage example and discussion of simulator results in the file
 %%% echo_bad1_sim.txt.
 %%% @end
 %%%
