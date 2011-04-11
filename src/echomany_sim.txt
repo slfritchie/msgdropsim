@@ -10,6 +10,8 @@ draft of the message delay mechanism.  To recreate:
     > eqc:quickcheck(slf_msgsim_qc:prop_simulate(echomany_sim, Opts)).
 
 ... and you'll get an error that looks something like this:
+(If you don't get an error, then you probably forgot the first step, the
+ "git checkout" comand!)
 
     runnable: passed
     order: failed
