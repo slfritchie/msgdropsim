@@ -1,0 +1,80 @@
+NOTE: Search for %% for hints on what to look for when something goes wrong.
+
+The echomany_sim.erl simulation shows that there is a bug in the first
+draft of the message delay mechanism.  To recreate:
+
+    % git checkout 0f46987
+    % make
+    % erl -pz sim -pz ./ebin
+    > Opts = [disable_partitions, {max_clients,1}, {max_servers,1}].
+    > eqc:quickcheck(slf_msgsim_qc:prop_simulate(echomany_sim, Opts)).
+
+... and you'll get an error that looks something like this:
+
+    runnable: passed
+    order: failed
+    [{client,c1,server,s1,should_be,[4,5],got,[5,4]}] /= [true]
+    Shrinking............(12 times)
+    %% One client, one server, one key (ignored)
+    {1,1,1}
+    {[{c1,{echo_op,s1,0}},{c1,{echo_op,s1,1}}],
+     [{c1,[],#Fun<echomany_sim.4.49579588>}],
+     [{s1,{unused,s1},#Fun<echomany_sim.3.125231098>}],
+    %% Very simple scheduler
+     [s1,c1],
+     [],
+    %% Messages from c1 -> s1 between executions steps 0 & 0 will be
+    %% delayed by one scheduling step.
+     [{delay,[c1],[s1],0,0,1}]}
+    Failed:
+    F1 = {1,1,1}
+    F2 = {[{c1,{echo_op,s1,0}},{c1,{echo_op,s1,1}}],
+          [{c1,[],#Fun<echomany_sim.4.49579588>}],
+          [{s1,{unused,s1},#Fun<echomany_sim.3.125231098>}],
+          [s1,c1],
+          [],
+          [{delay,[c1],[s1],0,0,1}]}
+    End = {sched,11,4,
+                 [s1,c1],
+                 [],
+                 [{c1,{proc,c1,[],[],
+                            {[],[]},
+                            {[],[]},
+                            delayed,#Fun<echomany_sim.4.49579588>,undefined}},
+                  {s1,{proc,s1,
+                            {unused,s1},
+                            [],
+                            {[],[]},
+                            {[],[]},
+                            outbox,#Fun<echomany_sim.3.125231098>,undefined}}],
+                 %% This is the system trace list, in reverse order.
+                 [{recv,10,s1,c1,{echo_reply,s1,0}},
+                  {deliver,9,s1,c1,{echo_reply,s1,0}},
+                  {bang,8,s1,c1,{echo_reply,s1,0}},
+                  {recv,8,c1,s1,{echo,c1,0}},
+                  {recv,7,s1,c1,{echo_reply,s1,1}},
+                  {deliver,6,s1,c1,{echo_reply,s1,1}},
+                  {deliver,5,c1,s1,{echo,c1,0}},
+                  {bang,4,s1,c1,{echo_reply,s1,1}},
+                  {recv,4,c1,s1,{echo,c1,1}},
+                  %% Here is where server s1 receives c1's 2nd message first.
+                  {deliver,3,c1,s1,{echo,c1,1}},
+                  {bang,2,c1,s1,{echo,c1,1}},
+                  {recv,2,scheduler,c1,{echo_op,s1,1}},
+                  %% The first message from c1 -> s1 is delayed
+                  {delay,0,c1,s1,{echo,c1,0},{num_rounds,1}},
+                  {bang,0,c1,s1,{echo,c1,0}},
+                  {recv,0,scheduler,c1,{echo_op,s1,0}}],
+                 %% This is the user trace list, in reverse order.
+                 %% At step #7,  client s1 received from server s1 the msg 1.
+                 %% At step #10, client s1 received from server s1 the msg 0.
+                 [{c1,10,{s1,0}},{c1,7,{s1,1}}],
+                 [],
+                 %% This is the scheduler's message delay schedule.
+                 [{{c1,s1},[{0,1}]}]}
+    Runnable = [], Receivable = []
+    order: failed
+    %% Client c1 should have received answers in the order [0,1]
+    %% but instead got answers [1,0].
+    [{client,c1,server,s1,should_be,[0,1],got,[1,0]}] /= [true]
+    false
