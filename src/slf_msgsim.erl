@@ -541,3 +541,7 @@ not_runnable_but_is_receivable_test() ->
 
 t_server0_throw_away_all(_Msg, St) ->
     {recv_general, same, St}.
+
+message_order_via_echomany_sim_test() ->
+    Opts = [disable_partitions, {max_clients,1}, {max_servers,1}],
+    true = eqc:quickcheck(slf_msgsim_qc:prop_simulate(echomany_sim, Opts)).
