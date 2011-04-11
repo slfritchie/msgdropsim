@@ -81,8 +81,13 @@ gen_partition(Module, NumClients, NumServers) ->
                   {partition, Tos, Froms, Start, Start + Len}]
          end).
 
-gen_message_delays(Module, _ModProps, NumClients, NumServers) ->
-    list(gen_delay(Module, NumClients, NumServers)).
+gen_message_delays(Module, ModProps, NumClients, NumServers) ->
+    case proplists:get_value(disable_delays, ModProps, false) of
+        true ->
+            [];
+        false ->
+            list(gen_delay(Module, NumClients, NumServers))
+    end.
 
 gen_delay(Module, NumClients, NumServers) ->
     Clients = lists:sublist(Module:all_clients(), 1, NumClients),
