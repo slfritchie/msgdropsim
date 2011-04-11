@@ -81,6 +81,19 @@ gen_partition(Module, NumClients, NumServers) ->
                   {partition, Tos, Froms, Start, Start + Len}]
          end).
 
+gen_message_delays(Module, _ModProps, NumClients, NumServers) ->
+    list(gen_delay(Module, NumClients, NumServers)).
+
+gen_delay(Module, NumClients, NumServers) ->
+    Clients = lists:sublist(Module:all_clients(), 1, NumClients),
+    Servers = lists:sublist(Module:all_servers(), 1, NumServers),
+    Both = Clients ++ Servers,
+    ?LET({Froms, Tos, Start, Len, DelayRounds},
+         {my_list_elements(Both), my_list_elements(Both),
+          gen_nat_nat2(10, 1), gen_nat_nat2(30, 1), nat()},
+         {delay, lists:usort(Froms), lists:usort(Tos),
+          Start, Start + Len, DelayRounds + 1}).
+
 gen_nat_nat2(A, B) ->
     frequency([{A, nat()},
                {B, ?LET({X,Y}, {nat(), nat()}, (X+1)*(Y+1))}]).
@@ -211,7 +224,7 @@ check_exact_msg_or_timeout(Clients, Predicted, Actual) ->
               Act = proplists:get_value(Client, Actual),
               lists:all(fun({X, X}) ->               true;
                            ({_X, server_timeout}) -> true;
-                           (_)                    ->  false
+                           (_)                    -> false
                         end, lists:zip(Pred, Act))
       end, Clients).                                
 
@@ -226,15 +239,18 @@ prop_simulate(Module, ModProps) ->
             {my_choose(MinClients, MaxClients),
              my_choose(MinServers, MaxServers),
              my_choose(MinKeys, MaxKeys)},
-    ?FORALL({Ops, ClientInits, ServerInits, SchedList, PartitionList} = F2,
+    ?FORALL({Ops, ClientInits, ServerInits, SchedList,
+             PartitionList, DelayList} = F2,
             {Module:gen_initial_ops(NumClients, NumServers, NumKeys, ModProps),
              Module:gen_client_initial_states(NumClients, ModProps),
              Module:gen_server_initial_states(NumServers, ModProps),
              gen_scheduler_list(Module, NumClients, NumServers),
-             gen_server_partitions(Module, ModProps, NumClients, NumServers)},
+             gen_server_partitions(Module, ModProps, NumClients, NumServers),
+             gen_message_delays(Module, ModProps, NumClients, NumServers)},
             begin
                 Sched0 = slf_msgsim:new_sim(ClientInits, ServerInits, Ops,
-                                            SchedList, PartitionList),
+                                            SchedList, PartitionList,
+                                            DelayList),
                 {Runnable, Sched1} = slf_msgsim:run_scheduler(Sched0),
                 Trc = slf_msgsim:get_trace(Sched1),
                 UTrc = slf_msgsim:get_utrace(Sched1),

@@ -74,6 +74,7 @@ verify_property(NumClients, NumServers, _Props, F1, F2, Ops,
     Actual = actual_echos(Clients, Sched1),
     NumMsgs = length([x || {bang,_,_,_,_} <- Trc]),
     NumDrops = length([x || {drop,_,_,_,_} <- Trc]),
+    NumDelays = length([x || {delay,_,_,_,_,_} <- Trc]),
     NumTimeouts = length([x || {recv,_,scheduler,_,timeout} <- Trc]),
     ?WHENFAIL(
        io:format("Failed:\nF1 = ~p\nF2 = ~p\nEnd = ~p\n"
@@ -89,12 +90,13 @@ verify_property(NumClients, NumServers, _Props, F1, F2, Ops,
        measure("msgs sent   ", NumMsgs,
        classify(NumDrops /= 0, at_least_1_msg_dropped,
        measure("msgs dropped", NumDrops,
+       measure("msgs delayed", NumDelays,
        measure("timeouts    ", NumTimeouts,
        begin
            conjunction([{runnable, Runnable == false},
                         {all_ok, slf_msgsim_qc:check_exact_msg_or_timeout(
                                    Clients, Predicted, Actual)}])
-       end)))))))).    
+       end))))))))).
 
 predict_echos(Clients, Ops) ->
     [{Client, begin

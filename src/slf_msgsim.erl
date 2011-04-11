@@ -27,6 +27,7 @@
 -include_lib("eunit/include/eunit.hrl").
 
 -type orddict()    :: orddict:orddict().
+-type delay()      :: {delay, [proc()], [proc()], integer(), integer(), integer()}.
 -type partition()  :: {partition, [proc()], [proc()], integer(), integer()}.
 -type proc()       :: atom().
 
@@ -51,19 +52,23 @@
           utrace = []  :: list(),     % user trace events
           %% Partition dictionary: key = {From::atom(), To::atom()}
           %% value = list of steps to drop packets
-          partitions   :: orddict()
+          partitions   :: orddict(),
+          %% Delay dictionary: key = {From::atom(), To::atom()}
+          %% value = list({StepNumber, DelayRounds}) (similar to partitions)
+          delays       :: orddict()
          }).
 
 -spec new_sim([{proc(), term(), fun()}], [{proc(), term(), fun()}],
-              [term()], [proc()], [partition()]) -> #sched{}.
-new_sim(Clients, Servers, InitialMsgs, SchedOrder, Partitions) ->
+              [term()], [proc()], [partition()], [delay()]) -> #sched{}.
+new_sim(Clients, Servers, InitialMsgs, SchedOrder, Partitions, Delays) ->
     AllCSs = Clients ++ Servers,
     AllNames = lists:usort([Name || {Name, _St, _Recv} <- AllCSs]),
     MissingPs =  AllNames -- lists:usort(SchedOrder),% Add missing procs to toks
     S = #sched{tokens = SchedOrder ++ MissingPs,
                procs = orddict:from_list([{Name, init_proc(ProcSpec)} ||
                                              {Name,_,_} = ProcSpec <- AllCSs]),
-               partitions = make_partition_dict(Partitions)
+               partitions = make_partition_dict(Partitions),
+               delays = make_delay_dict(Delays)
               },
     send_initial_msgs_to_procs(InitialMsgs, S).
 
@@ -94,6 +99,16 @@ make_partition_dict(Ps) ->
     lists:foldl(fun({Key, V}, D) -> orddict:append(Key, V, D) end,
                 orddict:new(), Raw).
 
+-spec make_delay_dict([delay()]) -> orddict().
+
+make_delay_dict(Ps) ->
+    Raw = [{{From, To}, {N, DelayRounds}} ||
+              {delay, Froms, Tos, Start, End, DelayRounds} <- Ps,
+              From <- lists:usort(Froms), To <- lists:usort(Tos),
+              N <- lists:seq(Start, End)],
+    lists:foldl(fun({Key, V}, D) -> orddict:append(Key, V, D) end,
+                orddict:new(), Raw).
+
 -spec send_initial_msgs_to_procs([term()], #sched{}) ->
                                         #sched{}.
 send_initial_msgs_to_procs(Ops, S0) ->
@@ -111,23 +126,37 @@ bang(scheduler, Rcpt, Msg, false, S) ->
     P = fetch_proc(Rcpt, S),
     store_proc(P#proc{mbox = P#proc.mbox ++ [{imsg, scheduler, Rcpt, Msg}]}, S);
 bang(Sender, Rcpt, Msg, IncrSentP,
-     #sched{numsent = NumSent0, partitions = PartD, step = Step} = S) ->
+     #sched{partitions = PartD, delays = DelayD, step = Step} = S) ->
     DropP = case orddict:find({Sender, Rcpt}, PartD) of
                 {ok, PartSteps} -> lists:member(Step, PartSteps);
                 error           -> false
             end,
-    if DropP ->
+    Delay = case orddict:find({Sender, Rcpt}, DelayD) of
+                {ok, DelaySteps} ->
+                    case lists:keyfind(Step, 1, DelaySteps) of
+                        false            -> false;
+                        {_, DelayRounds} -> DelayRounds
+                    end;
+                error            -> false
+            end,
+    if is_integer(Delay) ->
+            Trc = {delay, S#sched.step, Sender, Rcpt, Msg, {num_rounds, Delay}},
+            add_trace(Trc, bang2(Sender, Rcpt, Msg, IncrSentP, {t_delay, Delay}, S));
+       DropP ->
             Trc = {drop, S#sched.step, Sender, Rcpt, Msg},
             add_trace(Trc, S);
        true ->
-            P = fetch_proc(Sender, S),
-            NumSent = if IncrSentP -> NumSent0 + 1;
-                         true      -> NumSent0
-                      end,
-            Trc = {bang, S#sched.step, Sender, Rcpt, Msg},
-            store_proc(add_outgoing_msg(Sender, Rcpt, Msg, P),
-                       add_trace(Trc, S#sched{numsent = NumSent}))
+            bang2(Sender, Rcpt, Msg, IncrSentP, t_normal, S)
     end.
+
+bang2(Sender, Rcpt, Msg, IncrSentP, DeliveryType, #sched{numsent = NumSent0} = S) ->
+    P = fetch_proc(Sender, S),
+    NumSent = if IncrSentP -> NumSent0 + 1;
+                 true      -> NumSent0
+              end,
+    Trc = {bang, S#sched.step, Sender, Rcpt, Msg},
+    store_proc(add_outgoing_msg(Sender, Rcpt, Msg, DeliveryType, P),
+               add_trace(Trc, S#sched{numsent = NumSent})).
 
 fetch_proc(Name, S) ->
     orddict:fetch(Name, S#sched.procs).
@@ -234,16 +263,29 @@ consume_scheduler_token(P = #proc{mbox = Mbox, outbox = Outbox,
             end;
         outbox when OutNotEmpty ->
             {{value, IMsg}, Q2} = queue:out(P#proc.outbox),
-            NewS = deliver_msg(IMsg, S),
-            P2 = fetch_proc(P#proc.name, NewS),
-            store_proc(rotate_next_type(P2#proc{outbox = Q2}), incr_step(NewS));
+            deliver_rotate_and_incr_step(IMsg, Q2, P#proc.name,
+                                         q_normal, S);
         delayed when DelayedNotEmpty ->
-            %% TODO: Implement message delays.  N.B. message ordering
-            %%       between pairs of recipients should be respected
-            %%       in order to be properly Erlang'ish.
-            exit(delayed_not_supported);
+            case queue:out(P#proc.delayed) of
+                {{value, {IMsg, 0}}, Q2} ->
+                    deliver_rotate_and_incr_step(IMsg, Q2, P#proc.name,
+                                                 q_delay, S);
+                {{value, {IMsg, DelayRounds}}, Q2} ->
+                    Q3 = queue:in({IMsg, DelayRounds - 1}, Q2),
+                    store_proc(rotate_next_type(P#proc{delayed = Q3}),
+                               incr_step(S))
+            end;
         _ ->
             consume_scheduler_token(rotate_next_type(P), S, IterNum + 1)
+    end.
+
+deliver_rotate_and_incr_step(IMsg, Q2, ProcName, QType, S) ->
+    NewS = deliver_msg(IMsg, S),
+    P2 = fetch_proc(ProcName, NewS),
+    if QType == q_normal ->
+            store_proc(rotate_next_type(P2#proc{outbox=Q2}), incr_step(NewS));
+       QType == q_delay ->
+            store_proc(rotate_next_type(P2#proc{delayed=Q2}), incr_step(NewS))
     end.
 
 add_trace(Msg, S) ->
@@ -269,8 +311,26 @@ incr_numsent(#sched{numsent = NumSent} = S) ->
 incr_step(#sched{step = Step} = S) ->
     S#sched{step = Step + 1}.
 
-add_outgoing_msg(Sender, Rcpt, Msg, P) ->
-    P#proc{outbox = queue:in({imsg, Sender, Rcpt, Msg}, P#proc.outbox)}.
+%% TODO: I'll bet that I need to funnel all messages through a/the delay
+%%       queue!
+
+add_outgoing_msg(Sender, Rcpt, Msg, t_normal, P) ->
+    P#proc{outbox = queue:in({imsg, Sender, Rcpt, Msg}, P#proc.outbox)};
+add_outgoing_msg(Sender, Rcpt, Msg, {t_delay, DelayRounds0}, P) ->
+    Q = P#proc.delayed,
+    L = queue:to_list(Q),
+    MaxDelay = if L == [] -> 0;
+                  true    -> lists:max([Rnds || {_Imsg, Rnds} <- L])
+               end,
+    %% NOTE: We need to preserve message order between any Sender & Rcpt!
+    %%       The value of DelayRounds0 is advisory only: we may delay
+    %%       the message for longer.  The if stmt below will guarantee
+    %%       that each new message is delayed for at least 1 round longer
+    %%       than any other message.
+    DelayRounds = if DelayRounds0 =< MaxDelay -> 1;
+                     true                     -> DelayRounds0 - MaxDelay
+                  end,
+    P#proc{delayed = queue:in({{imsg, Sender, Rcpt, Msg}, DelayRounds}, Q)}.
 
 deliver_msg({imsg, Sender, Rcpt, Msg} = IMsg, S) ->
     Trc = {deliver, S#sched.step, Sender, Rcpt, Msg},
@@ -377,7 +437,7 @@ t_sched0(InitialMessages) ->
 
 t_sched0(InitialMessages, ClientFun, ServerFun) ->
     new_sim([{c, st, ClientFun}], [{s, st, ServerFun}],
-            InitialMessages, [c], []).
+            InitialMessages, [c], [], []).
 
 t_sched0a() ->
     t_sched0([{c, {echo, s, hello_world}},
