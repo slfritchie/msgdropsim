@@ -54,12 +54,17 @@
           partitions   :: orddict(),
           %% Delay dictionary: key = {From::atom(), To::atom()}
           %% value = list({StepNumber, DelaySteps}) (similar to partitions)
-          delays       :: orddict()
+          delays       :: orddict(),
+          module       :: atom()
          }).
 
 -spec new_sim([{proc(), term(), fun()}], [{proc(), term(), fun()}],
               [term()], [proc()], [partition()], [delay()]) -> #sched{}.
+
 new_sim(Clients, Servers, InitialMsgs, SchedOrder, Partitions, Delays) ->
+    new_sim(Clients, Servers, InitialMsgs, SchedOrder, Partitions, Delays, nomod).
+
+new_sim(Clients, Servers, InitialMsgs, SchedOrder, Partitions, Delays, Module) ->
     AllCSs = Clients ++ Servers,
     AllNames = lists:usort([Name || {Name, _St, _Recv} <- AllCSs]),
     MissingPs =  AllNames -- lists:usort(SchedOrder),% Add missing procs to toks
@@ -67,7 +72,8 @@ new_sim(Clients, Servers, InitialMsgs, SchedOrder, Partitions, Delays) ->
                procs = orddict:from_list([{Name, init_proc(ProcSpec)} ||
                                              {Name,_,_} = ProcSpec <- AllCSs]),
                partitions = make_partition_dict(Partitions),
-               delays = make_delay_dict(Delays)
+               delays = make_delay_dict(Delays),
+               module = Module
               },
     send_initial_msgs_to_procs(InitialMsgs, S).
 
@@ -337,11 +343,16 @@ rotate_next_type(P) ->
 
 run_proc_receive(ProcName, S) when is_atom(ProcName) ->
     run_proc_receive(fetch_proc(ProcName, S), S);
-run_proc_receive(P0 = #proc{name = ProcName}, S) ->
+run_proc_receive(P0 = #proc{name = ProcName}, S = #sched{module = Module}) ->
     erlang:put({?MODULE, sched}, S),
     erlang:put({?MODULE, self}, P0#proc.name),
-    RecvFun = if P0#proc.recv_w_timeout /= undefined -> P0#proc.recv_w_timeout;
-                 true                                -> P0#proc.recv_gen
+    RecvFun0 = if P0#proc.recv_w_timeout /= undefined -> P0#proc.recv_w_timeout;
+                  true                                -> P0#proc.recv_gen
+               end,
+    RecvFun = if is_function(RecvFun0, 2) ->
+                      RecvFun0;
+                 true ->
+                      fun(A, B) -> Module:RecvFun0(A, B) end
               end,
     RecvVal = receive_loop(P0#proc.mbox, RecvFun, P0#proc.state),
     NewS = erlang:erase({?MODULE, sched}),
@@ -349,8 +360,8 @@ run_proc_receive(P0 = #proc{name = ProcName}, S) ->
     case RecvVal of
         %% Return values from proc receive function
         {{imsg, Sender, Rcpt, Msg} = IMsg, {recv_general, RecFun0, NewProcS}} ->
-            RecFun = if RecFun0 == same -> P0#proc.recv_gen;
-                        true            -> RecFun0
+            RecFun = if RecFun0 == same  -> P0#proc.recv_gen;
+                        true             -> RecFun0
                      end,
             Trc = {recv, NewS#sched.step, Sender, Rcpt, Msg},
             P1 = fetch_proc(ProcName, NewS),

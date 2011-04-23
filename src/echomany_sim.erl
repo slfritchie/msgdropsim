@@ -84,8 +84,8 @@ verify_property(NumClients, NumServers, _Props, F1, F2, Ops,
        measure("msgs delayed", NumDelays,
        measure("timeouts    ", NumTimeouts,
        begin
-           conjunction([{runnable, Runnable == false},
-                        {order, order_ok_p(NumClients, NumServers, Trc, UTrc)}])
+           Runnable == false andalso
+               order_ok_p(NumClients, NumServers, Trc, UTrc)
        end))))))))).
 
 order_ok_p(NumClients, NumServers, Trc, UTrc) ->

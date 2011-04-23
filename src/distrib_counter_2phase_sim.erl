@@ -58,12 +58,12 @@ gen_counter_op(NumClients, NumServers) ->
 %% required
 gen_client_initial_states(NumClients, _Props) ->
     Clients = lists:sublist(all_clients(), 1, NumClients),
-    [{Clnt, #c{}, fun client_init/2} || Clnt <- Clients].
+    [{Clnt, #c{}, client_init} || Clnt <- Clients].
 
 %% required
 gen_server_initial_states(NumServers, _Props) ->
     Servers = lists:sublist(all_servers(), 1, NumServers),
-    [{Server, #s{val = gen_nat_nat2(5, 1)}, fun server_unasked/2} ||
+    [{Server, #s{val = gen_nat_nat2(5, 1)}, server_unasked} ||
         Server <- Servers].
 
 gen_nat_nat2(A, B) ->
@@ -117,7 +117,7 @@ verify_property(NumClients, NumServers, _Props, F1, F2, Ops,
 client_init({counter_op, Servers}, _St) ->
     [slf_msgsim:bang(Server, {ph1_ask, slf_msgsim:self()}) ||
         Server <- Servers],
-    {recv_timeout, fun client_ph1_waiting/2, #c{num_servers = length(Servers)}}.
+    {recv_timeout, client_ph1_waiting, #c{num_servers = length(Servers)}}.
 
 client_ph1_waiting({ph1_ask_ok, _Server, _Cookie, _Count} = Msg,
                    C = #c{num_responses = Resps, ph1_oks = Oks}) ->
@@ -131,7 +131,7 @@ client_ph1_waiting(timeout, C) ->
     cl_p1_next_step(true, C).
 
 cl_p1_next_step(true = _TimeoutHappened, C) ->
-    {recv_general, fun client_init/2, C};
+    {recv_general, client_init, C};
 cl_p1_next_step(false, C = #c{num_responses = NumResps}) ->
     Q = calc_q(C),
     if NumResps >= Q ->
@@ -146,7 +146,7 @@ client_ph2_waiting({ok, _Server, _Cookie},
             {recv_timeout, same, C#c{num_responses = NumResps + 1}};
        true ->
             slf_msgsim:add_utrace({counter, Val}),
-            {recv_general, fun client_init/2, C}
+            {recv_general, client_init, C}
     end;
 client_ph2_waiting({ph1_ask_ok, Server, Cookie, _ValDoesNotMatter} = Msg,
                    C = #c{ph1_oks = Oks, ph2_val = Val}) ->
@@ -159,11 +159,11 @@ client_ph2_waiting(timeout, C = #c{num_responses = NumResps, ph2_val = Val}) ->
        true ->
             ok
     end,
-    {recv_general, fun client_init/2, C}.
+    {recv_general, client_init, C}.
 
 server_unasked({ph1_ask, From}, S = #s{cookie = undefined}) ->
     S2 = send_ask_ok(From, S),
-    {recv_timeout, fun server_asked/2, S2};
+    {recv_timeout, server_asked, S2};
 server_unasked({ph2_do, From, Cookie, Val}, S) ->
     slf_msgsim:bang(From, {error, slf_msgsim:self(),
                            server_unasked, Cookie, Val}),
@@ -179,7 +179,7 @@ server_asked({ph2_do_set, From, Cookie, Val}, S = #s{cookie = Cookie,
             {recv_timeout, same, S3};
         [] ->
             S2 = S#s{cookie = undefined, val = Val},
-            {recv_general, fun server_unasked/2, S2}
+            {recv_general, server_unasked, S2}
     end;
 server_asked({ph1_ask, From}, S = #s{asker = Asker}) ->
     slf_msgsim:bang(From, {ph1_ask_sorry, slf_msgsim:self(), Asker}),
@@ -195,8 +195,8 @@ cl_p1_send_do(C = #c{ph1_oks = Oks}) ->
     NewVal = MaxVal + 1,
     [slf_msgsim:bang(Svr, {ph2_do_set, slf_msgsim:self(), Cookie, NewVal}) ||
         {ph1_ask_ok, Svr, Cookie, _Val} <- Oks],
-    {recv_timeout, fun client_ph2_waiting/2, C#c{num_responses = 0,
-                                                 ph2_val = NewVal}}.
+    {recv_timeout, client_ph2_waiting, C#c{num_responses = 0,
+                                           ph2_val = NewVal}}.
 
 make_val(Replies) ->
     lists:max([Counter || {_Server, Counter} <- Replies]).
