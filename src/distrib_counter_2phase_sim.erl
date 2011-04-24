@@ -37,8 +37,7 @@
 -record(s, {                                    % server state
           val                :: integer(),
           asker              :: 'undefined' | atom(),
-          cookie = undefined :: 'undefined' | reference(),
-          waiting = []       :: list
+          cookie = undefined :: 'undefined' | reference()
          }).
 
 t(MaxClients, MaxServers) ->
@@ -81,6 +80,8 @@ verify_property(NumClients, NumServers, _Props, F1, F2, Ops,
     NumCrashes = length([x || {process_crash,_,_,_,_,_} <- Trc]),
     Emitted = [Count || {_Clnt,_Step,{counter,Count}} <- UTrc,
                         Count /= timeout],
+    Phase1Timeouts = [x || {_Clnt,_Step,{timeout_phase1, _}} <- UTrc],
+    Phase2Timeouts = [x || {_Clnt,_Step,{timeout_phase2, _}} <- UTrc],
     Steps = slf_msgsim:get_step(Sched1),
     ?WHENFAIL(
        io:format("Failed:\nF1 = ~p\nF2 = ~p\nEnd2 = ~P\n"
@@ -97,6 +98,8 @@ verify_property(NumClients, NumServers, _Props, F1, F2, Ops,
        measure("crashes     ", NumCrashes,
        measure("# ops       ", length(Ops),
        measure("# emitted   ", length(Emitted),
+       measure("# ph1 t.out ", length(Phase1Timeouts),
+       measure("# ph2 t.out ", length(Phase2Timeouts),
        measure("msgs sent   ", NumMsgs,
        measure("msgs dropped", NumDrops,
        measure("timeouts    ", NumTimeouts,
@@ -110,7 +113,7 @@ verify_property(NumClients, NumServers, _Props, F1, F2, Ops,
            %%              {emits_unique, length(Emitted) ==
            %%                            length(lists:usort(Emitted))},
            %%              {not_retro, Emitted == lists:sort(Emitted)}])
-       end))))))))))).
+       end))))))))))))).
 
 %%% Protocol implementation
 
@@ -131,6 +134,7 @@ client_ph1_waiting(timeout, C) ->
     cl_p1_next_step(true, C).
 
 cl_p1_next_step(true = _TimeoutHappened, C) ->
+    slf_msgsim:add_utrace({timeout_phase1, slf_msgsim:self()}),
     {recv_general, client_init, C};
 cl_p1_next_step(false, C = #c{num_responses = NumResps}) ->
     Q = calc_q(C),
@@ -157,7 +161,7 @@ client_ph2_waiting(timeout, C = #c{num_responses = NumResps, ph2_val = Val}) ->
     if NumResps >= Q ->
             slf_msgsim:add_utrace({counter, Val});
        true ->
-            ok
+            slf_msgsim:add_utrace({timeout_phase2, slf_msgsim:self()})
     end,
     {recv_general, client_init, C}.
 
@@ -169,18 +173,9 @@ server_unasked({ph2_do, From, Cookie, Val}, S) ->
                            server_unasked, Cookie, Val}),
     {recv_general, same, S}.
 
-server_asked({ph2_do_set, From, Cookie, Val}, S = #s{cookie = Cookie,
-                                                     waiting = Waiting}) ->
+server_asked({ph2_do_set, From, Cookie, Val}, S = #s{cookie = Cookie}) ->
     slf_msgsim:bang(From, {ok, slf_msgsim:self(), Cookie}),
-    case Waiting of
-        [Head|Ws] ->
-            S2 = S#s{cookie = undefined, val = Val, waiting = Ws},
-            S3 = send_ask_ok(Head, S2),
-            {recv_timeout, same, S3};
-        [] ->
-            S2 = S#s{cookie = undefined, val = Val},
-            {recv_general, server_unasked, S2}
-    end;
+    {recv_general, server_unasked, S#s{cookie = undefined, val = Val}};
 server_asked({ph1_ask, From}, S = #s{asker = Asker}) ->
     slf_msgsim:bang(From, {ph1_ask_sorry, slf_msgsim:self(), Asker}),
     {recv_timeout, same, S}.

@@ -194,7 +194,8 @@ receivable_procs(S) ->
     [Name || {Name, P} <- S#sched.procs, receivable_proc_p(P)].
 
 run_scheduler(S) ->
-    run_scheduler(S, 5000).
+    %%run_scheduler(S, 5000).
+    run_scheduler(S, 500).
 
 run_scheduler(S0, 0) ->
     %% Run one more time: if the processes are stupid enough to
