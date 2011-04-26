@@ -131,6 +131,7 @@ client_ph1_waiting({ph1_ask_sorry, _Server, _LuckyClient} = Msg,
     cl_p1_next_step(false, C#c{num_responses = Resps + 1,
                                ph1_sorrys    = [Msg|Sorrys]});
 client_ph1_waiting(timeout, C) ->
+io:format("C ph1 timeout: ~p\n", [C]),
     cl_p1_next_step(true, C).
 
 cl_p1_next_step(true = _TimeoutHappened, C) ->
@@ -159,6 +160,7 @@ client_ph2_waiting({ph1_ask_ok, Server, Cookie, _ValDoesNotMatter} = Msg,
 client_ph2_waiting(timeout, C = #c{num_responses = NumResps, ph2_val = Val}) ->
     Q = calc_q(C),
     if NumResps >= Q ->
+io:format("C ph2 timeout: ~p\n", [C]),
             slf_msgsim:add_utrace({counter, Val});
        true ->
             slf_msgsim:add_utrace({timeout_phase2, slf_msgsim:self()})
@@ -175,10 +177,15 @@ server_unasked({ph2_do, From, Cookie, Val}, S) ->
 
 server_asked({ph2_do_set, From, Cookie, Val}, S = #s{cookie = Cookie}) ->
     slf_msgsim:bang(From, {ok, slf_msgsim:self(), Cookie}),
-    {recv_general, server_unasked, S#s{cookie = undefined, val = Val}};
+    {recv_general, server_unasked, S#s{asker = undefined,
+                                       cookie = undefined,
+                                       val = Val}};
 server_asked({ph1_ask, From}, S = #s{asker = Asker}) ->
     slf_msgsim:bang(From, {ph1_ask_sorry, slf_msgsim:self(), Asker}),
-    {recv_timeout, same, S}.
+    {recv_timeout, same, S};
+server_asked(timeout, S) ->
+    {recv_general, server_unasked, S#s{asker = undefined,
+                                       cookie = undefined}}.
 
 send_ask_ok(From, S = #s{val = Val}) ->
     Cookie = make_ref(),
