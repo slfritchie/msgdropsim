@@ -81,6 +81,7 @@ verify_property(NumClients, NumServers, _Props, F1, F2, Ops,
     Emitted = [Count || {_Clnt,_Step,{counter,Count}} <- UTrc,
                         Count /= timeout],
     Phase1Timeouts = [x || {_Clnt,_Step,{timeout_phase1, _}} <- UTrc],
+    Phase1QuorumFails = [x || {_Clnt,_Step,{ph1_quorum_failure,_,_,_}} <- UTrc],
     Phase2Timeouts = [x || {_Clnt,_Step,{timeout_phase2, _}} <- UTrc],
     Steps = slf_msgsim:get_step(Sched1),
     ?WHENFAIL(
@@ -99,13 +100,17 @@ verify_property(NumClients, NumServers, _Props, F1, F2, Ops,
        measure("# ops       ", length(Ops),
        measure("# emitted   ", length(Emitted),
        measure("# ph1 t.out ", length(Phase1Timeouts),
+       measure("# ph1 q.fail", length(Phase1QuorumFails),
        measure("# ph2 t.out ", length(Phase2Timeouts),
        measure("msgs sent   ", NumMsgs,
        measure("msgs dropped", NumDrops,
        measure("timeouts    ", NumTimeouts,
        begin
            Runnable == false andalso
-           length(Ops) == length(UTrc) andalso
+           length(Ops) == length(Emitted) +
+               length(Phase1QuorumFails) +
+               length(Phase1Timeouts) +
+               length(Phase2Timeouts) andalso
            length(Emitted) == length(lists:usort(Emitted)) andalso
            Emitted == lists:sort(Emitted)
            %% conjunction([{runnable, Runnable == false},
@@ -113,7 +118,7 @@ verify_property(NumClients, NumServers, _Props, F1, F2, Ops,
            %%              {emits_unique, length(Emitted) ==
            %%                            length(lists:usort(Emitted))},
            %%              {not_retro, Emitted == lists:sort(Emitted)}])
-       end))))))))))))).
+       end)))))))))))))).
 
 %%% Protocol implementation
 
@@ -133,24 +138,50 @@ client_ph1_waiting({ph1_ask_sorry, _Server, _LuckyClient} = Msg,
 client_ph1_waiting(timeout, C) ->
     cl_p1_next_step(true, C).
 
-cl_p1_next_step(true = _TimeoutHappened, C) ->
+client_ph1_cancelling({ph1_cancel_ok, Server},
+                      C = #c{ph1_oks = Oks}) ->
+    NewOks = lists:keydelete(Server, 2, Oks),
+    if NewOks == [] ->
+            {recv_general, client_init, #c{}};
+       true ->
+            {recv_timeout, same, C#c{ph1_oks = NewOks}}
+    end;
+client_ph1_cancelling(timeout, C) ->
+    cl_p1_send_cancels(C).
+
+cl_p1_next_step(true = _TimeoutHappened, _C) ->
     slf_msgsim:add_utrace({timeout_phase1, slf_msgsim:self()}),
-    {recv_general, client_init, C};
+    {recv_general, client_init, #c{}};
 cl_p1_next_step(false, C = #c{num_responses = NumResps}) ->
     Q = calc_q(C),
     if NumResps >= Q ->
-            cl_p1_send_do(C);
+            NumOks = length(C#c.ph1_oks),
+            if NumOks >= Q ->
+                    cl_p1_send_do(C);
+               true ->
+                    slf_msgsim:add_utrace({ph1_quorum_failure, slf_msgsim:self(), num_oks, NumOks}),
+                    if NumOks == 0 ->
+                            {recv_general, client_init, #c{}};
+                       true ->
+                            cl_p1_send_cancels(C)
+                    end
+            end;
        true ->
             {recv_timeout, same, C}
     end.
 
+cl_p1_send_cancels(C = #c{ph1_oks = Oks}) ->
+    [slf_msgsim:bang(Server, {ph1_cancel, slf_msgsim:self(), Cookie}) ||
+        {ph1_ask_ok, Server, Cookie, _Val} <- Oks],
+    {recv_timeout, client_ph1_cancelling, C}.
+
 client_ph2_waiting({ok, _Server, _Cookie},
                    C = #c{num_responses = NumResps, ph2_val = Val}) ->
-    if length(C#c.ph1_oks) /= NumResps ->
+    if length(C#c.ph1_oks) /= NumResps + 1 ->
             {recv_timeout, same, C#c{num_responses = NumResps + 1}};
        true ->
             slf_msgsim:add_utrace({counter, Val}),
-            {recv_general, client_init, C}
+            {recv_general, client_init, #c{}}
     end;
 client_ph2_waiting({ph1_ask_ok, Server, Cookie, _ValDoesNotMatter} = Msg,
                    C = #c{ph1_oks = Oks, ph2_val = Val}) ->
@@ -163,7 +194,7 @@ client_ph2_waiting(timeout, C = #c{num_responses = NumResps, ph2_val = Val}) ->
        true ->
             slf_msgsim:add_utrace({timeout_phase2, slf_msgsim:self()})
     end,
-    {recv_general, client_init, C}.
+    {recv_general, client_init, #c{}}.
 
 server_unasked({ph1_ask, From}, S = #s{cookie = undefined}) ->
     S2 = send_ask_ok(From, S),
@@ -181,6 +212,10 @@ server_asked({ph2_do_set, From, Cookie, Val}, S = #s{cookie = Cookie}) ->
 server_asked({ph1_ask, From}, S = #s{asker = Asker}) ->
     slf_msgsim:bang(From, {ph1_ask_sorry, slf_msgsim:self(), Asker}),
     {recv_timeout, same, S};
+server_asked({ph1_cancel, Asker, Cookie}, S = #s{asker = Asker,
+                                                 cookie = Cookie}) ->
+    slf_msgsim:bang(Asker, {ph1_cancel_ok, slf_msgsim:self()}),
+    server_asked(timeout, S); % lazy reuse
 server_asked(timeout, S) ->
     {recv_general, server_unasked, S#s{asker = undefined,
                                        cookie = undefined}}.
