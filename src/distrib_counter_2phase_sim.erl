@@ -202,6 +202,10 @@ server_unasked({ph1_ask, From}, S = #s{cookie = undefined}) ->
 server_unasked({ph2_do, From, Cookie, Val}, S) ->
     slf_msgsim:bang(From, {error, slf_msgsim:self(),
                            server_unasked, Cookie, Val}),
+    {recv_general, same, S};
+server_unasked({ph1_cancel, From, _Cookie}, S) ->
+    %% Late arrival, tell client it's OK, but really we ignore it
+    slf_msgsim:bang(From, {ph1_cancel_ok, slf_msgsim:self()}),
     {recv_general, same, S}.
 
 server_asked({ph2_do_set, From, Cookie, Val}, S = #s{cookie = Cookie}) ->
@@ -216,6 +220,10 @@ server_asked({ph1_cancel, Asker, Cookie}, S = #s{asker = Asker,
                                                  cookie = Cookie}) ->
     slf_msgsim:bang(Asker, {ph1_cancel_ok, slf_msgsim:self()}),
     server_asked(timeout, S); % lazy reuse
+server_asked({ph1_cancel, From, _Cookie}, S) ->
+    %% Late arrival, tell client it's OK, but really we ignore it
+    slf_msgsim:bang(From, {ph1_cancel_ok, slf_msgsim:self()}),
+    {recv_timeout, same, S};
 server_asked(timeout, S) ->
     {recv_general, server_unasked, S#s{asker = undefined,
                                        cookie = undefined}}.
