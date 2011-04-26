@@ -31,7 +31,8 @@
           num_responses = 0 :: integer(),
           ph1_oks = []      :: list(),
           ph1_sorrys = []   :: list(),
-          ph2_val = 0       :: integer()
+          ph2_val = 0       :: integer(),
+          ph2_now           :: 'undefined' | {integer(), integer(), integer()}
          }).
 
 -record(s, {                                    % server state
@@ -78,8 +79,12 @@ verify_property(NumClients, NumServers, _Props, F1, F2, Ops,
     NumDrops = length([x || {drop,_,_,_,_} <- Trc]),
     NumTimeouts = length([x || {recv,_,scheduler,_,timeout} <- Trc]),
     NumCrashes = length([x || {process_crash,_,_,_,_,_} <- Trc]),
-    Emitted = [Count || {_Clnt,_Step,{counter,Count}} <- UTrc,
+    %% We need to sort the emitted events by "time", see comment
+    %% below with "erlang:now()" in it.
+    Emitted0 = [Inner || {_Clnt, _Step, Inner = {counter, _Now, Count}} <- UTrc,
                         Count /= timeout],
+    Emitted1 = lists:keysort(2, Emitted0),
+    Emitted = [Count || {counter, _Now, Count} <- Emitted1],
     Phase1Timeouts = [x || {_Clnt,_Step,{timeout_phase1, _}} <- UTrc],
     Phase1QuorumFails = [x || {_Clnt,_Step,{ph1_quorum_failure,_,_,_}} <- UTrc],
     Phase2Timeouts = [x || {_Clnt,_Step,{timeout_phase2, _}} <- UTrc],
@@ -180,7 +185,7 @@ client_ph2_waiting({ok, _Server, _Cookie},
     if length(C#c.ph1_oks) /= NumResps + 1 ->
             {recv_timeout, same, C#c{num_responses = NumResps + 1}};
        true ->
-            slf_msgsim:add_utrace({counter, Val}),
+            slf_msgsim:add_utrace({counter, C#c.ph2_now, Val}),
             {recv_general, client_init, #c{}}
     end;
 client_ph2_waiting({ph1_ask_ok, Server, Cookie, _ValDoesNotMatter} = Msg,
@@ -190,7 +195,7 @@ client_ph2_waiting({ph1_ask_ok, Server, Cookie, _ValDoesNotMatter} = Msg,
 client_ph2_waiting(timeout, C = #c{num_responses = NumResps, ph2_val = Val}) ->
     Q = calc_q(C),
     if NumResps >= Q ->
-            slf_msgsim:add_utrace({counter, Val});
+            slf_msgsim:add_utrace({counter, C#c.ph2_now, Val});
        true ->
             slf_msgsim:add_utrace({timeout_phase2, slf_msgsim:self()})
     end,
@@ -236,10 +241,20 @@ send_ask_ok(From, S = #s{val = Val}) ->
 cl_p1_send_do(C = #c{ph1_oks = Oks}) ->
     [{_, _, _, MaxVal}|_] = lists:reverse(lists:keysort(4, Oks)),
     NewVal = MaxVal + 1,
+    %% Using erlang:now() here is naughty in the general case but OK
+    %% in this particular case: we're in strictly-increasing counters
+    %% over time.  erlang:now() is strictly increasing wrt time.  If
+    %% we save the now() time when we've made our decision of what
+    %% NewVal should be, then we can include that timestamp in our
+    %% utrace entry when phase2 is finished, and then the
+    %% verify_property() function can sort the Emitted list by now()
+    %% timestamps and then check for correct counter ordering.
+    Now = erlang:now(),
     [slf_msgsim:bang(Svr, {ph2_do_set, slf_msgsim:self(), Cookie, NewVal}) ||
         {ph1_ask_ok, Svr, Cookie, _Val} <- Oks],
     {recv_timeout, client_ph2_waiting, C#c{num_responses = 0,
-                                           ph2_val = NewVal}}.
+                                           ph2_val = NewVal,
+                                           ph2_now = Now}}.
 
 make_val(Replies) ->
     lists:max([Counter || {_Server, Counter} <- Replies]).
