@@ -131,7 +131,6 @@ client_ph1_waiting({ph1_ask_sorry, _Server, _LuckyClient} = Msg,
     cl_p1_next_step(false, C#c{num_responses = Resps + 1,
                                ph1_sorrys    = [Msg|Sorrys]});
 client_ph1_waiting(timeout, C) ->
-io:format("C ph1 timeout: ~p\n", [C]),
     cl_p1_next_step(true, C).
 
 cl_p1_next_step(true = _TimeoutHappened, C) ->
@@ -160,7 +159,6 @@ client_ph2_waiting({ph1_ask_ok, Server, Cookie, _ValDoesNotMatter} = Msg,
 client_ph2_waiting(timeout, C = #c{num_responses = NumResps, ph2_val = Val}) ->
     Q = calc_q(C),
     if NumResps >= Q ->
-io:format("C ph2 timeout: ~p\n", [C]),
             slf_msgsim:add_utrace({counter, Val});
        true ->
             slf_msgsim:add_utrace({timeout_phase2, slf_msgsim:self()})
@@ -193,7 +191,7 @@ send_ask_ok(From, S = #s{val = Val}) ->
     S#s{asker = From, cookie = Cookie}.
 
 cl_p1_send_do(C = #c{ph1_oks = Oks}) ->
-    [{_, _, _, MaxVal}|_] = lists:keysort(4, Oks),
+    [{_, _, _, MaxVal}|_] = lists:reverse(lists:keysort(4, Oks)),
     NewVal = MaxVal + 1,
     [slf_msgsim:bang(Svr, {ph2_do_set, slf_msgsim:self(), Cookie, NewVal}) ||
         {ph1_ask_ok, Svr, Cookie, _Val} <- Oks],
