@@ -27,6 +27,7 @@
 -include_lib("eqc/include/eqc.hrl").
 
 -record(c, {                                    % client state
+          clop              :: 'undefined' | reference(),
           num_servers       :: integer(),
           num_responses = 0 :: integer(),
           ph1_oks = []      :: list(),
@@ -128,11 +129,15 @@ verify_property(NumClients, NumServers, _Props, F1, F2, Ops,
 %%% Protocol implementation
 
 client_init({counter_op, Servers}, _St) ->
-    [slf_msgsim:bang(Server, {ph1_ask, slf_msgsim:self()}) ||
+    ClOp = make_ref(),
+    [slf_msgsim:bang(Server, {ph1_ask, slf_msgsim:self(), ClOp}) ||
         Server <- Servers],
-    {recv_timeout, client_ph1_waiting, #c{num_servers = length(Servers)}}.
+    {recv_timeout, client_ph1_waiting, #c{clop = ClOp,
+                                          num_servers = length(Servers)}};
+client_init({ph1_ask_sorry, _, _, _}, St) ->
+    {recv_general, same, St}.
 
-client_ph1_waiting({ph1_ask_ok, _Server, _Cookie, _Count} = Msg,
+client_ph1_waiting({ph1_ask_ok, _ClOp, _Server, _Cookie, _Count} = Msg,
                    C = #c{num_responses = Resps, ph1_oks = Oks}) ->
     cl_p1_next_step(false, C#c{num_responses = Resps + 1,
                                ph1_oks       = [Msg|Oks]});
@@ -177,7 +182,7 @@ cl_p1_next_step(false, C = #c{num_responses = NumResps}) ->
 
 cl_p1_send_cancels(C = #c{ph1_oks = Oks}) ->
     [slf_msgsim:bang(Server, {ph1_cancel, slf_msgsim:self(), Cookie}) ||
-        {ph1_ask_ok, Server, Cookie, _Val} <- Oks],
+        {ph1_ask_ok, _ClOp, Server, Cookie, _Val} <- Oks],
     {recv_timeout, client_ph1_cancelling, C}.
 
 client_ph2_waiting({ok, _Server, _Cookie},
@@ -188,8 +193,8 @@ client_ph2_waiting({ok, _Server, _Cookie},
             slf_msgsim:add_utrace({counter, C#c.ph2_now, Val}),
             {recv_general, client_init, #c{}}
     end;
-client_ph2_waiting({ph1_ask_ok, Server, Cookie, _ValDoesNotMatter} = Msg,
-                   C = #c{ph1_oks = Oks, ph2_val = Val}) ->
+client_ph2_waiting({ph1_ask_ok, ClOp, Server, Cookie, _ValDoesNotMatter} = Msg,
+                   C = #c{clop = ClOp, ph1_oks = Oks, ph2_val = Val}) ->
     slf_msgsim:bang(Server, {ph2_do_set, slf_msgsim:self(), Cookie, Val}),
     {recv_timeout, same, C#c{ph1_oks = [Msg|Oks]}};
 client_ph2_waiting(timeout, C = #c{num_responses = NumResps, ph2_val = Val}) ->
@@ -201,8 +206,8 @@ client_ph2_waiting(timeout, C = #c{num_responses = NumResps, ph2_val = Val}) ->
     end,
     {recv_general, client_init, #c{}}.
 
-server_unasked({ph1_ask, From}, S = #s{cookie = undefined}) ->
-    S2 = send_ask_ok(From, S),
+server_unasked({ph1_ask, From, ClOp}, S = #s{cookie = undefined}) ->
+    S2 = send_ask_ok(From, ClOp, S),
     {recv_timeout, server_asked, S2};
 server_unasked({ph2_do, From, Cookie, Val}, S) ->
     slf_msgsim:bang(From, {error, slf_msgsim:self(),
@@ -218,8 +223,8 @@ server_asked({ph2_do_set, From, Cookie, Val}, S = #s{cookie = Cookie}) ->
     {recv_general, server_unasked, S#s{asker = undefined,
                                        cookie = undefined,
                                        val = Val}};
-server_asked({ph1_ask, From}, S = #s{asker = Asker}) ->
-    slf_msgsim:bang(From, {ph1_ask_sorry, slf_msgsim:self(), Asker}),
+server_asked({ph1_ask, From, ClOp}, S = #s{asker = Asker}) ->
+    slf_msgsim:bang(From, {ph1_ask_sorry, ClOp, slf_msgsim:self(), Asker}),
     {recv_timeout, same, S};
 server_asked({ph1_cancel, Asker, Cookie}, S = #s{asker = Asker,
                                                  cookie = Cookie}) ->
@@ -233,13 +238,13 @@ server_asked(timeout, S) ->
     {recv_general, server_unasked, S#s{asker = undefined,
                                        cookie = undefined}}.
 
-send_ask_ok(From, S = #s{val = Val}) ->
-    Cookie = make_ref(),
-    slf_msgsim:bang(From, {ph1_ask_ok, slf_msgsim:self(), Cookie, Val}),
+send_ask_ok(From, ClOp, S = #s{val = Val}) ->
+    Cookie = {cky,now()},
+    slf_msgsim:bang(From, {ph1_ask_ok, ClOp, slf_msgsim:self(), Cookie, Val}),
     S#s{asker = From, cookie = Cookie}.
 
-cl_p1_send_do(C = #c{ph1_oks = Oks}) ->
-    [{_, _, _, MaxVal}|_] = lists:reverse(lists:keysort(4, Oks)),
+cl_p1_send_do(C = #c{clop = _ClOp, ph1_oks = Oks}) ->
+    [{_, _, _, _, MaxVal}|_] = lists:reverse(lists:keysort(5, Oks)),
     NewVal = MaxVal + 1,
     %% Using erlang:now() here is naughty in the general case but OK
     %% in this particular case: we're in strictly-increasing counters
@@ -251,7 +256,7 @@ cl_p1_send_do(C = #c{ph1_oks = Oks}) ->
     %% timestamps and then check for correct counter ordering.
     Now = erlang:now(),
     [slf_msgsim:bang(Svr, {ph2_do_set, slf_msgsim:self(), Cookie, NewVal}) ||
-        {ph1_ask_ok, Svr, Cookie, _Val} <- Oks],
+        {ph1_ask_ok, _x_ClOp, Svr, Cookie, _Val} <- Oks],
     {recv_timeout, client_ph2_waiting, C#c{num_responses = 0,
                                            ph2_val = NewVal,
                                            ph2_now = Now}}.
