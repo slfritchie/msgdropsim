@@ -128,34 +128,50 @@ verify_property(NumClients, NumServers, _Props, F1, F2, Ops,
 
 %%% Protocol implementation
 
-client_init({counter_op, Servers}, _St) ->
+client_init({counter_op, Servers}, _C) ->
     ClOp = make_ref(),
     [slf_msgsim:bang(Server, {ph1_ask, slf_msgsim:self(), ClOp}) ||
         Server <- Servers],
     {recv_timeout, client_ph1_waiting, #c{clop = ClOp,
                                           num_servers = length(Servers)}};
-client_init({ph1_ask_sorry, _, _, _}, St) ->
-    {recv_general, same, St}.
+client_init({ph1_ask_sorry, _ClOp, _, _}, C) ->
+    {recv_general, same, C}.
 
-client_ph1_waiting({ph1_ask_ok, _ClOp, _Server, _Cookie, _Count} = Msg,
-                   C = #c{num_responses = Resps, ph1_oks = Oks}) ->
+client_ph1_waiting({ph1_ask_ok, ClOp, _Server, _Cookie, _Count} = Msg,
+                   C = #c{clop = ClOp, num_responses = Resps, ph1_oks = Oks}) ->
     cl_p1_next_step(false, C#c{num_responses = Resps + 1,
                                ph1_oks       = [Msg|Oks]});
-client_ph1_waiting({ph1_ask_sorry, _Server, _LuckyClient} = Msg,
-                   C = #c{num_responses = Resps, ph1_sorrys = Sorrys}) ->
+client_ph1_waiting({ph1_ask_ok, _ClOp, _Server, _Cookie, _Count}, C) ->
+    {recv_timeout, same, C};
+client_ph1_waiting({ph1_ask_sorry, ClOp, _Server, _LuckyClient} = Msg,
+                   C = #c{clop = ClOp,
+                          num_responses = Resps, ph1_sorrys = Sorrys}) ->
     cl_p1_next_step(false, C#c{num_responses = Resps + 1,
                                ph1_sorrys    = [Msg|Sorrys]});
+client_ph1_waiting({ph1_ask_sorry, _ClOp, _Server, _LuckyClient}, C) ->
+    {recv_timeout, same, C};
 client_ph1_waiting(timeout, C) ->
     cl_p1_next_step(true, C).
 
-client_ph1_cancelling({ph1_cancel_ok, Server},
-                      C = #c{ph1_oks = Oks}) ->
-    NewOks = lists:keydelete(Server, 2, Oks),
+client_ph1_cancelling({ph1_cancel_ok, ClOp, Server},
+                      C = #c{clop = ClOp, ph1_oks = Oks}) ->
+    NewOks = lists:keydelete(Server, 3, Oks),
     if NewOks == [] ->
             {recv_general, client_init, #c{}};
        true ->
             {recv_timeout, same, C#c{ph1_oks = NewOks}}
     end;
+client_ph1_cancelling({ph1_cancel_ok, _ClOp, _Server}, C) ->
+    {recv_timeout, same, C};
+%% TODO: Verify that if the following 2 clauses (ask OK and ask sorry)
+%%       aren't consumed here, then things work correctly (by luck) because
+%%       we will consume them safely in another state?
+client_ph1_cancelling({ph1_ask_ok, _ClOp, _Server, _Cookie, _Count}=_Msg, C) ->
+    %%io:format("Race 1"),
+    {recv_timeout, same, C};
+client_ph1_cancelling({ph1_ask_sorry, _ClOp, _Server, _LuckyClient}=_Msg, C) ->
+    %%io:format("Race 2"),
+    {recv_timeout, same, C};
 client_ph1_cancelling(timeout, C) ->
     cl_p1_send_cancels(C).
 
@@ -180,8 +196,8 @@ cl_p1_next_step(false, C = #c{num_responses = NumResps}) ->
             {recv_timeout, same, C}
     end.
 
-cl_p1_send_cancels(C = #c{ph1_oks = Oks}) ->
-    [slf_msgsim:bang(Server, {ph1_cancel, slf_msgsim:self(), Cookie}) ||
+cl_p1_send_cancels(C = #c{clop = ClOp, ph1_oks = Oks}) ->
+    [slf_msgsim:bang(Server, {ph1_cancel, slf_msgsim:self(), ClOp, Cookie}) ||
         {ph1_ask_ok, _ClOp, Server, Cookie, _Val} <- Oks],
     {recv_timeout, client_ph1_cancelling, C}.
 
@@ -213,9 +229,9 @@ server_unasked({ph2_do, From, Cookie, Val}, S) ->
     slf_msgsim:bang(From, {error, slf_msgsim:self(),
                            server_unasked, Cookie, Val}),
     {recv_general, same, S};
-server_unasked({ph1_cancel, From, _Cookie}, S) ->
+server_unasked({ph1_cancel, From, ClOp, _Cookie}, S) ->
     %% Late arrival, tell client it's OK, but really we ignore it
-    slf_msgsim:bang(From, {ph1_cancel_ok, slf_msgsim:self()}),
+    slf_msgsim:bang(From, {ph1_cancel_ok, ClOp, slf_msgsim:self()}),
     {recv_general, same, S}.
 
 server_asked({ph2_do_set, From, Cookie, Val}, S = #s{cookie = Cookie}) ->
@@ -226,13 +242,13 @@ server_asked({ph2_do_set, From, Cookie, Val}, S = #s{cookie = Cookie}) ->
 server_asked({ph1_ask, From, ClOp}, S = #s{asker = Asker}) ->
     slf_msgsim:bang(From, {ph1_ask_sorry, ClOp, slf_msgsim:self(), Asker}),
     {recv_timeout, same, S};
-server_asked({ph1_cancel, Asker, Cookie}, S = #s{asker = Asker,
-                                                 cookie = Cookie}) ->
-    slf_msgsim:bang(Asker, {ph1_cancel_ok, slf_msgsim:self()}),
+server_asked({ph1_cancel, Asker, ClOp, Cookie}, S = #s{asker = Asker,
+                                                       cookie = Cookie}) ->
+    slf_msgsim:bang(Asker, {ph1_cancel_ok, ClOp, slf_msgsim:self()}),
     server_asked(timeout, S); % lazy reuse
-server_asked({ph1_cancel, From, _Cookie}, S) ->
+server_asked({ph1_cancel, From, ClOp, _Cookie}, S) ->
     %% Late arrival, tell client it's OK, but really we ignore it
-    slf_msgsim:bang(From, {ph1_cancel_ok, slf_msgsim:self()}),
+    slf_msgsim:bang(From, {ph1_cancel_ok, ClOp, slf_msgsim:self()}),
     {recv_timeout, same, S};
 server_asked(timeout, S) ->
     {recv_general, server_unasked, S#s{asker = undefined,
