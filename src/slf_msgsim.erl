@@ -298,6 +298,10 @@ get_step(S) ->
 get_tokens(S) ->
     S#sched.tokens.
 
+get_mailbox(ProcName, S) ->
+    P = fetch_proc(ProcName, S),
+    P#proc.mbox.
+
 incr_numsent(#sched{numsent = NumSent} = S) ->
     S#sched{numsent = NumSent + 1}.
 

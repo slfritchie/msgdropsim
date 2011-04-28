@@ -90,6 +90,10 @@ verify_property(NumClients, NumServers, _Props, F1, F2, Ops,
     Phase1QuorumFails = [x || {_Clnt,_Step,{ph1_quorum_failure,_,_,_}} <- UTrc],
     Phase2Timeouts = [x || {_Clnt,_Step,{timeout_phase2, _}} <- UTrc],
     Steps = slf_msgsim:get_step(Sched1),
+    AllProcs = lists:sublist(all_clients(), 1, NumClients) ++
+        lists:sublist(all_servers(), 1, NumServers),
+    Unconsumed = lists:append([slf_msgsim:get_mailbox(Proc, Sched1) ||
+                                  Proc <- AllProcs]),
     ?WHENFAIL(
        io:format("Failed:\nF1 = ~p\nF2 = ~p\nEnd2 = ~P\n"
                  "Runnable = ~p, Receivable = ~p\n"
@@ -117,8 +121,9 @@ verify_property(NumClients, NumServers, _Props, F1, F2, Ops,
                length(Phase1QuorumFails) +
                length(Phase1Timeouts) +
                length(Phase2Timeouts) andalso
-           length(Emitted) == length(lists:usort(Emitted)) andalso
-           Emitted == lists:sort(Emitted)
+               length(Emitted) == length(lists:usort(Emitted)) andalso
+               Emitted == lists:sort(Emitted) andalso
+               Unconsumed == []
            %% conjunction([{runnable, Runnable == false},
            %%              {ops_finish, length(Ops) == length(UTrc)},
            %%              {emits_unique, length(Emitted) ==
@@ -129,27 +134,36 @@ verify_property(NumClients, NumServers, _Props, F1, F2, Ops,
 %%% Protocol implementation
 
 client_init({counter_op, Servers}, _C) ->
+    %% The clop/ClOp is short for "Client Operation".  It's used in
+    %% a manner similar to gen_server's reference() tag: the ClOp is
+    %% used to avoid receiving messages that are late, i.e. messages
+    %% that have been delayed or have been received after we made an
+    %% important state transition.  If we don't restrict our match/receive
+    %% pattern in this way, then messages that arrive late can cause
+    %% very hard-to-reproduce errors.  (Well, hard if we didn't have
+    %% QuickCheck to help reproduct them.  :-)
     ClOp = make_ref(),
     [slf_msgsim:bang(Server, {ph1_ask, slf_msgsim:self(), ClOp}) ||
         Server <- Servers],
     {recv_timeout, client_ph1_waiting, #c{clop = ClOp,
                                           num_servers = length(Servers)}};
-client_init({ph1_ask_sorry, _ClOp, _, _}, C) ->
+client_init(T, C) when is_tuple(T) ->
+    %% In all other client states, our receive contain a guard based
+    %% on ClOp, so any message that we see here in client_init that
+    %% isn't a 'counter_op' message and is a tuple is something that
+    %% arrived late in a prior 'counter_op' request.  We don't care
+    %% about them, but we should consume them.
     {recv_general, same, C}.
 
 client_ph1_waiting({ph1_ask_ok, ClOp, _Server, _Cookie, _Count} = Msg,
                    C = #c{clop = ClOp, num_responses = Resps, ph1_oks = Oks}) ->
     cl_p1_next_step(false, C#c{num_responses = Resps + 1,
                                ph1_oks       = [Msg|Oks]});
-client_ph1_waiting({ph1_ask_ok, _ClOp, _Server, _Cookie, _Count}, C) ->
-    {recv_timeout, same, C};
 client_ph1_waiting({ph1_ask_sorry, ClOp, _Server, _LuckyClient} = Msg,
                    C = #c{clop = ClOp,
                           num_responses = Resps, ph1_sorrys = Sorrys}) ->
     cl_p1_next_step(false, C#c{num_responses = Resps + 1,
                                ph1_sorrys    = [Msg|Sorrys]});
-client_ph1_waiting({ph1_ask_sorry, _ClOp, _Server, _LuckyClient}, C) ->
-    {recv_timeout, same, C};
 client_ph1_waiting(timeout, C) ->
     cl_p1_next_step(true, C).
 
@@ -161,17 +175,6 @@ client_ph1_cancelling({ph1_cancel_ok, ClOp, Server},
        true ->
             {recv_timeout, same, C#c{ph1_oks = NewOks}}
     end;
-client_ph1_cancelling({ph1_cancel_ok, _ClOp, _Server}, C) ->
-    {recv_timeout, same, C};
-%% TODO: Verify that if the following 2 clauses (ask OK and ask sorry)
-%%       aren't consumed here, then things work correctly (by luck) because
-%%       we will consume them safely in another state?
-client_ph1_cancelling({ph1_ask_ok, _ClOp, _Server, _Cookie, _Count}=_Msg, C) ->
-    %%io:format("Race 1"),
-    {recv_timeout, same, C};
-client_ph1_cancelling({ph1_ask_sorry, _ClOp, _Server, _LuckyClient}=_Msg, C) ->
-    %%io:format("Race 2"),
-    {recv_timeout, same, C};
 client_ph1_cancelling(timeout, C) ->
     cl_p1_send_cancels(C).
 
@@ -201,8 +204,9 @@ cl_p1_send_cancels(C = #c{clop = ClOp, ph1_oks = Oks}) ->
         {ph1_ask_ok, _ClOp, Server, Cookie, _Val} <- Oks],
     {recv_timeout, client_ph1_cancelling, C}.
 
-client_ph2_waiting({ok, _Server, _Cookie},
-                   C = #c{num_responses = NumResps, ph2_val = Val}) ->
+client_ph2_waiting({ok, ClOp, _Server, _Cookie},
+                   C = #c{clop = ClOp,
+                          num_responses = NumResps, ph2_val = Val}) ->
     if length(C#c.ph1_oks) /= NumResps + 1 ->
             {recv_timeout, same, C#c{num_responses = NumResps + 1}};
        true ->
@@ -211,7 +215,7 @@ client_ph2_waiting({ok, _Server, _Cookie},
     end;
 client_ph2_waiting({ph1_ask_ok, ClOp, Server, Cookie, _ValDoesNotMatter} = Msg,
                    C = #c{clop = ClOp, ph1_oks = Oks, ph2_val = Val}) ->
-    slf_msgsim:bang(Server, {ph2_do_set, slf_msgsim:self(), Cookie, Val}),
+    slf_msgsim:bang(Server, {ph2_do_set, slf_msgsim:self(), ClOp, Cookie, Val}),
     {recv_timeout, same, C#c{ph1_oks = [Msg|Oks]}};
 client_ph2_waiting(timeout, C = #c{num_responses = NumResps, ph2_val = Val}) ->
     Q = calc_q(C),
@@ -225,8 +229,8 @@ client_ph2_waiting(timeout, C = #c{num_responses = NumResps, ph2_val = Val}) ->
 server_unasked({ph1_ask, From, ClOp}, S = #s{cookie = undefined}) ->
     S2 = send_ask_ok(From, ClOp, S),
     {recv_timeout, server_asked, S2};
-server_unasked({ph2_do, From, Cookie, Val}, S) ->
-    slf_msgsim:bang(From, {error, slf_msgsim:self(),
+server_unasked({ph2_do_set, From, ClOp, Cookie, Val}, S) ->
+    slf_msgsim:bang(From, {error, ClOp, slf_msgsim:self(),
                            server_unasked, Cookie, Val}),
     {recv_general, same, S};
 server_unasked({ph1_cancel, From, ClOp, _Cookie}, S) ->
@@ -234,8 +238,8 @@ server_unasked({ph1_cancel, From, ClOp, _Cookie}, S) ->
     slf_msgsim:bang(From, {ph1_cancel_ok, ClOp, slf_msgsim:self()}),
     {recv_general, same, S}.
 
-server_asked({ph2_do_set, From, Cookie, Val}, S = #s{cookie = Cookie}) ->
-    slf_msgsim:bang(From, {ok, slf_msgsim:self(), Cookie}),
+server_asked({ph2_do_set, From, ClOp, Cookie, Val}, S = #s{cookie = Cookie}) ->
+    slf_msgsim:bang(From, {ok, ClOp, slf_msgsim:self(), Cookie}),
     {recv_general, server_unasked, S#s{asker = undefined,
                                        cookie = undefined,
                                        val = Val}};
@@ -259,7 +263,7 @@ send_ask_ok(From, ClOp, S = #s{val = Val}) ->
     slf_msgsim:bang(From, {ph1_ask_ok, ClOp, slf_msgsim:self(), Cookie, Val}),
     S#s{asker = From, cookie = Cookie}.
 
-cl_p1_send_do(C = #c{clop = _ClOp, ph1_oks = Oks}) ->
+cl_p1_send_do(C = #c{clop = ClOp, ph1_oks = Oks}) ->
     [{_, _, _, _, MaxVal}|_] = lists:reverse(lists:keysort(5, Oks)),
     NewVal = MaxVal + 1,
     %% Using erlang:now() here is naughty in the general case but OK
@@ -271,7 +275,7 @@ cl_p1_send_do(C = #c{clop = _ClOp, ph1_oks = Oks}) ->
     %% verify_property() function can sort the Emitted list by now()
     %% timestamps and then check for correct counter ordering.
     Now = erlang:now(),
-    [slf_msgsim:bang(Svr, {ph2_do_set, slf_msgsim:self(), Cookie, NewVal}) ||
+    [slf_msgsim:bang(Svr, {ph2_do_set, slf_msgsim:self(), ClOp, Cookie, NewVal}) ||
         {ph1_ask_ok, _x_ClOp, Svr, Cookie, _Val} <- Oks],
     {recv_timeout, client_ph2_waiting, C#c{num_responses = 0,
                                            ph2_val = NewVal,
