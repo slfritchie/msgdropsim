@@ -133,6 +133,46 @@ verify_property(NumClients, NumServers, _Props, F1, F2, Ops,
 
 %%% Protocol implementation
 
+%% Message sequence diagram
+%%
+%% Clients C1 and C2 are trying to update a key simultaneously on
+%% servers S1 and S2.  Several requests, including C1 -> S2 and all
+%% messages with server S3, are not shown because those extra messages
+%% do not demonstrate any new types of protocol messages.  An odd
+%% number of servers is recommended because phase 1 of this protocol
+%% requires that a client acquire a quorum of phase 1 ok responses
+%% before that client is permitted to execute phase 2 of the protocol.
+%%
+%% Phase 1 cancel requires that the client wait for all phase 1 cancel
+%% responses before the client is allowed to continue.
+%%
+%% In the example below:
+%%
+%% a. C1 wins the race to S1 and therefore gets a phase 1 ok.
+%% b. C2 loses the race to S1 and gets a 'sorry' response.
+%% c. C2 won the race with S2, but since S2 doesn't have a quorum of
+%%    phase 1 ok responses, C2 must send a phase 1 cancel to the servers
+%%    that it *did* get phase 1 ok responses from.
+%% d. Assuming that C1 got a quorum of phase 1 ok responses, C1 uses
+%%    phase 2 to set the new value on all servers that gave C1 a phase 1
+%%    ok responses.
+%%
+%% 
+%%         C1                          C2                          S1       S2
+%% Steps a & b:
+%%         |-------- phase 1 ask ----------------------------------->
+%%                                     |-------- phase 1 ask ------->
+%%                                     |-------- phase 1 ask ---------------->
+%%         <-------- phase 1 ok + cookie + current value V0 --------|
+%%                                     <-------- phase 1 sorry -----|
+%%                                     <--- phase 1 ok + cookie + curval Vx -|
+%% Step c:
+%%                                     |-------- phase 1 cancel + cookie ---->
+%%                                     <-------- phase 1 cancel ok ----------|
+%% Step d:
+%%         |-------- phase 2 set + cookie + new value V1 ----------->
+%%         <-------- phase 2 ok ------------------------------------|
+
 client_init({counter_op, Servers}, _C) ->
     %% The clop/ClOp is short for "Client Operation".  It's used in
     %% a manner similar to gen_server's reference() tag: the ClOp is
