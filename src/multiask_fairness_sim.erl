@@ -119,40 +119,44 @@ verify_property(NumClients, NumServers, _Props, F1, F2, Ops,
                Unconsumed == [] andalso
                NumWinners < 2 andalso
                NumWaiters < 2
-               %% %% NumClients == NumWinners + NumLosers + NumWaiters andalso
-               %% if NumWinners == 1 ->
-               %%         NumWaiters == 0;
-               %%    NumWaiters == 1 ->
-               %%         NumWinners == 0;
-               %%    true ->
-               %%         true
-               %% end
        end))))))))))))).
 
 %%% Protocol implementation
 
 %% Message sequence diagram
 %%
+%% Try to create a 2-phase ask/do protocol that is also fair.  The
+%% protocol that is simulated in "distrib_counter_2phase_sim.erl"
+%% appears to be correct (simulator finds no faults), but it is
+%% definitely not a fair protocol.  In cases of contention by a very
+%% large number of clients, the protocol can starve most of those
+%% clients for quite a while.
+%%
+%% My intention with this simulation module is to modify phase 1 (the
+%% "ask" phase) of "distrib_counter_2phase_sim.erl to give enough
+%% information to the clients so that they can figure out if one of
+%% them is in a position where it knows that it will be able to
+%% execute phase 2 soon.  Er, whatever "soon" means ... hopefully
+%% something fair.
+%%
 %%     C1                          C2                          Server
-%%     |-------- phase 1 ask ----------------------------------->
 %%                                 |-------- phase 1 ask ------->
-%%     <-------- phase 1 ok + cookie + current value V0 --------|
-%%                                 <-------- phase 1 sorry -----|
-%%     |-------- phase 2 set + cookie + new value V1 ----------->
-%%     <-------- phase 2 ok ------------------------------------|
-%%                                 <- phase 1 ok+cookie+val V1 -|
-%%                                 |- phase 2 set+cookie+val V2->
-%%                                 <- phase 2 ok ---------------|
+%%                                 <- phase 1 ok + cookie + val-|
+%%     |-------- phase 1 ask ----------------------------------->
+%%     <-------- phase 1 sorry + my winner = C2 ----------------|
 %%
-%% So, the loser of phase 1, C2, would receive receive 2 messages in
-%% response to its phase 1 ask:
-%%    1. phase 1 sorry
-%%    2. phase 1 ok + cookie + current value
+%% However, this protocol cannot always choose a single runner-up.
+%% For 3 clients and 3 servers:
+%%   Client 1: Wins S1, loses S2 & S3 -> lose
+%%   Client 2: Wins S2, loses S1 to C1 -> C2>C1 -> will_wait
+%%   Client 3: Wins S3, loses S1 to C1 -> C3>C1 -> will_wait
 %%
-%% My reasoning behind this is that the "ask" would be like asking for a
-%% place to wait in a line/queue: the server would maintain this ordered
-%% queue and return "phase 1 ok..." messages to each client in the order
-%% that they were received.
+%% Despite my best intention, C2 and C3 don't know anything about each
+%% other, so neither of them can calculate that it is best to abort.
+%% I'd tried to find this combination via paper and pen, but the
+%% counter-example eluded me.  It looks pretty obvious, in hindsight.
+%%
+%% Fairness, bah humbug.
 
 client_init({counter_op, Servers}, _C) ->
     ClOp = make_ref(),
@@ -176,7 +180,7 @@ client_ph1_waiting(timeout, C) ->
     cl_p1_next_step(true, C).
 
 cl_p1_next_step(true = _TimeoutHappened, C) ->
-    slf_msgsim:add_utrace({ph1_lose, slf_msgsim:self(), xyz}),
+    slf_msgsim:add_utrace({ph1_lose, slf_msgsim:self(), xyz_timeout}),
     {recv_general, client_consume_noop, C};
 cl_p1_next_step(false, C = #c{num_responses = NumResps, ph1_sorrys = Sorrys}) ->
     Q = calc_q(C),
