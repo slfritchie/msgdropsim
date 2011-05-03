@@ -55,7 +55,8 @@
           %% Delay dictionary: key = {From::atom(), To::atom()}
           %% value = list({StepNumber, DelaySteps}) (similar to partitions)
           delays       :: orddict(),
-          module       :: atom()
+          module       :: atom(),
+          options      :: list()
          }).
 
 -spec new_sim([{proc(), term(), fun()}], [{proc(), term(), fun()}],
@@ -65,6 +66,11 @@ new_sim(Clients, Servers, InitialMsgs, SchedOrder, Partitions, Delays) ->
     new_sim(Clients, Servers, InitialMsgs, SchedOrder, Partitions, Delays, nomod).
 
 new_sim(Clients, Servers, InitialMsgs, SchedOrder, Partitions, Delays, Module) ->
+    new_sim(Clients, Servers, InitialMsgs, SchedOrder, Partitions, Delays,
+            Module, []).
+
+new_sim(Clients, Servers, InitialMsgs, SchedOrder, Partitions, Delays,
+        Module, Options) ->
     AllCSs = Clients ++ Servers,
     AllNames = lists:usort([Name || {Name, _St, _Recv} <- AllCSs]),
     MissingPs =  AllNames -- lists:usort(SchedOrder),% Add missing procs to toks
@@ -73,7 +79,8 @@ new_sim(Clients, Servers, InitialMsgs, SchedOrder, Partitions, Delays, Module) -
                                              {Name,_,_} = ProcSpec <- AllCSs]),
                partitions = make_partition_dict(Partitions),
                delays = make_delay_dict(Delays),
-               module = Module
+               module = Module,
+               options = Options
               },
     send_initial_msgs_to_procs(InitialMsgs, S).
 
@@ -391,6 +398,14 @@ run_proc_receive(P0 = #proc{name = ProcName}, S = #sched{module = Module}) ->
             S;
         {error, Msg, X, Y} ->
             Tr = erlang:get_stacktrace(),
+            case proplists:get_value(crash_report, NewS#sched.options, true) of
+                true ->
+                    io:format("Crash: process ~p receiving msg ~p\n"
+                              "Error: ~p:~p\n~p\n",
+                              [ProcName, Msg, X, Y, Tr]);
+                _ ->
+                    ok
+            end,
             NewS2 = add_trace({process_crash, ProcName, Msg, X, Y, Tr}, NewS),
             NewS3 = NewS2#sched{procs = orddict:erase(ProcName, S#sched.procs)},
             incr_step(NewS3)

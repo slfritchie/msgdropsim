@@ -183,7 +183,7 @@ prop_simulate(Module, ModProps) ->
             begin
                 Sched0 = slf_msgsim:new_sim(ClientInits, ServerInits, Ops,
                                             SchedList, PartitionList,
-                                            DelayList, Module),
+                                            DelayList, Module, ModProps),
                 {Runnable, Sched1} = slf_msgsim:run_scheduler(Sched0),
                 Trc = slf_msgsim:get_trace(Sched1),
                 UTrc = slf_msgsim:get_utrace(Sched1),
