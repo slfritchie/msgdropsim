@@ -39,6 +39,7 @@
 -record(s, {                                    % server state
           val                :: integer(),
           asker              :: 'undefined' | atom(),
+          sent_sorrys = []   :: list(atom()),
           cookie = undefined :: 'undefined' | reference()
          }).
 
@@ -103,6 +104,8 @@ verify_property(NumClients, NumServers, _Props, F1, F2, Ops,
                   slf_msgsim:receivable_procs(Sched1),
                   NumWinners, NumLosers, NumWaiters]),
        classify(NumDrops /= 0, at_least_1_msg_dropped,
+       classify(length(Ops) > 0 andalso NumDrops == 0 andalso NumWinners == 0 andalso NumWaiters == 0, drops_0_no_winner_or_waiters,
+       classify(length(Ops) > 0 andalso NumDrops /= 0 andalso NumWinners == 0 andalso NumWaiters == 0, some_drops_no_winner_or_waiters,
        measure("clients     ", NumClients,
        measure("servers     ", NumServers,
        measure("sched steps ", Steps,
@@ -110,16 +113,33 @@ verify_property(NumClients, NumServers, _Props, F1, F2, Ops,
        measure("# ops       ", length(Ops),
        measure("# winners   ", length(Winners),
        measure("# losers    ", length(Losers),
-       measure("# waiters", length(Waiters),
+       measure("# waiters   ", length(Waiters),
        measure("msgs sent   ", NumMsgs,
        measure("msgs dropped", NumDrops,
        measure("timeouts    ", NumTimeouts,
        begin
            Runnable == false andalso
                Unconsumed == [] andalso
+               if
+                   length(Ops) > 0 andalso NumDrops == 0 andalso
+                   NumWinners == 0 andalso NumWaiters == 0 ->
+                       false;
+                   true ->
+                       true
+               end andalso
                NumWinners < 2 andalso
-               NumWaiters < 2
-       end))))))))))))).
+               %% NumWaiters < 2    % 0 or 1 is ideal
+               %% NumWaiters < 4 % pagmatic/wacky experiment
+               %% Heh, the problem with this protocol is that it can't
+               %% put an upper bound on the number of processes that decide
+               %% that they did not lose and that they will wait.
+               %% For examples, using the options:
+               %%      [{min_clients,9},{max_clients,9}, {max_servers,1}]
+               %% ... I can see a failure where:
+               %%      Win/Lose/Wait = 1/0/5
+               %%      false
+               NumWaiters < 5 % pagmatic/wacky experiment
+       end))))))))))))))).
 
 %%% Protocol implementation
 
@@ -143,7 +163,7 @@ verify_property(NumClients, NumServers, _Props, F1, F2, Ops,
 %%                                 |-------- phase 1 ask ------->
 %%                                 <- phase 1 ok + cookie + val-|
 %%     |-------- phase 1 ask ----------------------------------->
-%%     <-------- phase 1 sorry + my winner = C2 ----------------|
+%%     <-------- phase 1 sorry + my winner + my losers ---------|
 %%
 %% However, this protocol cannot always choose a single runner-up.
 %% For 3 clients and 3 servers:
@@ -182,30 +202,29 @@ client_ph1_waiting(timeout, C) ->
 cl_p1_next_step(true = _TimeoutHappened, C) ->
     slf_msgsim:add_utrace({ph1_lose, slf_msgsim:self(), xyz_timeout}),
     {recv_general, client_consume_noop, C};
-cl_p1_next_step(false, C = #c{num_responses = NumResps, ph1_sorrys = Sorrys}) ->
+cl_p1_next_step(false, C = #c{num_servers = NumServers,
+                              num_responses = NumResps, ph1_sorrys = Sorrys}) ->
     Q = calc_q(C),
-    if NumResps >= Q ->
+    if NumResps == NumServers ->
             NumOks = length(C#c.ph1_oks),
             if NumOks >= Q ->
                     slf_msgsim:add_utrace({ph1_win, slf_msgsim:self(), xyz}),
                     {recv_general, client_consume_noop, C};
                true ->
-                    OtherClients = [Cl || {ph1_ask_sorry, _, _, Cl} <- Sorrys],
+                    OtherCs0 = [Cls || {ph1_ask_sorry, _, _, Cls} <- Sorrys],
+                    OtherCs = lists:flatten(OtherCs0),
                     {BiggestOtherClient, NumOtherOks} = find_biggest_other(
-                                                          OtherClients),
+                                                          OtherCs),
                     Me = slf_msgsim:self(),
-                    if %% NumOks > NumOtherOks orelse
-                       %% (NumOks == NumOtherOks andalso
-                       (NumOks >= NumOtherOks andalso
-                        Me > BiggestOtherClient) ->
-                            Extra = [{oks, C#c.ph1_oks},
-                                     {sorrys, C#c.ph1_sorrys},
-                                     {biggest_other, BiggestOtherClient},
-                                     {num_other_oks, NumOtherOks}],
+                    Extra = [{oks, C#c.ph1_oks},
+                             {sorrys, C#c.ph1_sorrys},
+                             {biggest_other, BiggestOtherClient},
+                             {num_other_oks, NumOtherOks}],
+                    if Me > BiggestOtherClient ->
                             slf_msgsim:add_utrace({ph1_will_wait, Me, Extra}),
                             {recv_general, client_consume_noop, C};
                        true ->
-                            slf_msgsim:add_utrace({ph1_lose, Me, xyz}),
+                            slf_msgsim:add_utrace({ph1_lose, Me, Extra}),
                             {recv_general, client_consume_noop, C}
                     end
             end;
@@ -231,11 +250,13 @@ server_unasked({ph1_cancel, From, ClOp, _Cookie}, S) ->
 server_asked({ph2_do_set, From, ClOp, Cookie, Val}, S = #s{cookie = Cookie}) ->
     slf_msgsim:bang(From, {ok, ClOp, slf_msgsim:self(), Cookie}),
     {recv_general, server_unasked, S#s{asker = undefined,
+                                       sent_sorrys = [],
                                        cookie = undefined,
                                        val = Val}};
-server_asked({ph1_ask, From, ClOp}, S = #s{asker = Asker}) ->
-    slf_msgsim:bang(From, {ph1_ask_sorry, ClOp, slf_msgsim:self(), Asker}),
-    {recv_timeout, same, S};
+server_asked({ph1_ask, From, ClOp}, S = #s{asker = Asker, sent_sorrys = Ss}) ->
+    All = [Asker|Ss],
+    slf_msgsim:bang(From, {ph1_ask_sorry, ClOp, slf_msgsim:self(), All}),
+    {recv_timeout, same, S#s{sent_sorrys = [From|Ss]}};
 server_asked({ph1_cancel, Asker, ClOp, Cookie}, S = #s{asker = Asker,
                                                        cookie = Cookie}) ->
     slf_msgsim:bang(Asker, {ph1_cancel_ok, ClOp, slf_msgsim:self()}),
@@ -246,6 +267,7 @@ server_asked({ph1_cancel, From, ClOp, _Cookie}, S) ->
     {recv_timeout, same, S};
 server_asked(timeout, S) ->
     {recv_general, server_unasked, S#s{asker = undefined,
+                                       sent_sorrys = [],
                                        cookie = undefined}}.
 
 send_ask_ok(From, ClOp, S = #s{val = Val}) ->
