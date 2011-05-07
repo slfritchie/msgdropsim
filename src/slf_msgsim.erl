@@ -401,7 +401,7 @@ run_proc_receive(P0 = #proc{name = ProcName}, S = #sched{module = Module}) ->
             case proplists:get_value(crash_report, NewS#sched.options, true) of
                 true ->
                     io:format("Crash: process ~p receiving msg ~p\n"
-                              "Error: ~p:~p\n~p\n",
+                              "Error: ~p:~p\nStack trace:\n~p\n",
                               [ProcName, Msg, X, Y, Tr]);
                 _ ->
                     ok
