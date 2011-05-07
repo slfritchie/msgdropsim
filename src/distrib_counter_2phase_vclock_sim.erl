@@ -97,12 +97,11 @@ verify_property(NumClients, NumServers, _Props, F1, F2, Ops,
     Emitted = [Count || {counter, _Now, Count} <- Emitted1],
     Phase1Timeouts = [x || {_Clnt,_Step,{timeout_phase1, _}} <- UTrc],
     Phase1QuorumFails = [x || {_Clnt,_Step,{ph1_quorum_failure,_,_,_}} <- UTrc],
-    Phase2Timeouts = [x || {_Clnt,_Step,{timeout_phase2, _}} <- UTrc],
+    Phase2Timeouts = [x || {_Clnt,_Step,{timeout_phase2, _, _}} <- UTrc],
     Steps = slf_msgsim:get_step(Sched1),
     AllProcs = lists:sublist(all_clients(), 1, NumClients) ++
         lists:sublist(all_servers(), 1, NumServers),
-    Unconsumed = lists:append([slf_msgsim:get_mailbox(Proc, Sched1) ||
-                                  Proc <- AllProcs]),
+    Unconsumed = lists:append([get_mailbox(Proc, Sched1) || Proc <- AllProcs]),
     ?WHENFAIL(
        io:format("Failed:\nF1 = ~p\nF2 = ~p\nEnd2 = ~P\n"
                  "Runnable = ~p, Receivable = ~p\n"
@@ -132,7 +131,8 @@ verify_property(NumClients, NumServers, _Props, F1, F2, Ops,
                length(Phase2Timeouts) andalso
                length(Emitted) == length(lists:usort(Emitted)) andalso
                Emitted == lists:sort(Emitted) andalso
-               Unconsumed == []
+               Unconsumed == [] andalso
+               NumCrashes == 0
        end)))))))))))))).
 
 %%% Protocol implementation
@@ -268,7 +268,7 @@ client_ph2_waiting(timeout, C = #c{num_responses = NumResps, ph2_val = Z}) ->
             [Val] = Z#obj.contents,
             slf_msgsim:add_utrace({counter, C#c.ph2_now, Val});
        true ->
-            slf_msgsim:add_utrace({timeout_phase2, slf_msgsim:self()})
+            slf_msgsim:add_utrace({timeout_phase2, slf_msgsim:self(), Z})
     end,
     {recv_general, client_init, #c{}}.
 
@@ -340,6 +340,14 @@ make_val(Replies) ->
 
 calc_q(#c{num_servers = NumServers}) ->
     (NumServers div 2) + 1.
+
+get_mailbox(Proc, Sched) ->
+    try
+        slf_msgsim:get_mailbox(Proc, Sched)
+    catch error:function_clause ->
+            %% Process crashed -> orddict:fetch() fails by function_clause
+            []
+    end.            
 
 %%% Misc....
 
