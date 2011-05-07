@@ -36,17 +36,16 @@
           ph2_now           :: 'undefined' | {integer(), integer(), integer()}
          }).
 
--record(s, {                                    % server state
+-record(obj, {
+          %% key = undefined,
           vclock             :: vclock:vclock(),
-          val                :: integer(),
-          asker              :: 'undefined' | atom(),
-          cookie = undefined :: 'undefined' | reference()
+          contents           :: [integer()]
          }).
 
--record(obj, {
-          key = undefined,
-          vclock           :: vclock:vclock(),
-          contents         :: [integer()]
+-record(s, {                                    % server state
+          val                :: #obj{},
+          asker              :: 'undefined' | atom(),
+          cookie = undefined :: 'undefined' | reference()
          }).
 
 t(MaxClients, MaxServers) ->
@@ -71,8 +70,10 @@ gen_client_initial_states(NumClients, _Props) ->
 %% required
 gen_server_initial_states(NumServers, _Props) ->
     Servers = lists:sublist(all_servers(), 1, NumServers),
-    [{Server, #s{vclock = vclock:fresh(),
-                 val = [gen_nat_nat2(5, 1)]}, server_unasked} ||
+    [{Server,
+      #s{val = #obj{vclock = vclock:fresh(),
+                    contents = [gen_nat_nat2(5, 1)]}},
+      server_unasked} ||
         Server <- Servers].
 
 gen_nat_nat2(A, B) ->
@@ -131,12 +132,8 @@ verify_property(NumClients, NumServers, _Props, F1, F2, Ops,
                length(Phase2Timeouts) andalso
                length(Emitted) == length(lists:usort(Emitted)) andalso
                Emitted == lists:sort(Emitted) andalso
+               strictly_sequential(Emitted) andalso
                Unconsumed == []
-           %% conjunction([{runnable, Runnable == false},
-           %%              {ops_finish, length(Ops) == length(UTrc)},
-           %%              {emits_unique, length(Emitted) ==
-           %%                            length(lists:usort(Emitted))},
-           %%              {not_retro, Emitted == lists:sort(Emitted)}])
        end)))))))))))))).
 
 %%% Protocol implementation
@@ -203,7 +200,7 @@ client_init(T, C) when is_tuple(T) ->
     %% about them, but we should consume them.
     {recv_general, same, C}.
 
-client_ph1_waiting({ph1_ask_ok, ClOp, _Server, _Cookie, _Count} = Msg,
+client_ph1_waiting({ph1_ask_ok, ClOp, _Server, _Cookie, _Z} = Msg,
                    C = #c{clop = ClOp, num_responses = Resps, ph1_oks = Oks}) ->
     cl_p1_next_step(false, C#c{num_responses = Resps + 1,
                                ph1_oks       = [Msg|Oks]});
@@ -249,25 +246,27 @@ cl_p1_next_step(false, C = #c{num_responses = NumResps}) ->
 
 cl_p1_send_cancels(C = #c{clop = ClOp, ph1_oks = Oks}) ->
     [slf_msgsim:bang(Server, {ph1_cancel, slf_msgsim:self(), ClOp, Cookie}) ||
-        {ph1_ask_ok, _ClOp, Server, Cookie, _Val} <- Oks],
+        {ph1_ask_ok, _ClOp, Server, Cookie, _Z} <- Oks],
     {recv_timeout, client_ph1_cancelling, C}.
 
 client_ph2_waiting({ok, ClOp, _Server, _Cookie},
                    C = #c{clop = ClOp,
-                          num_responses = NumResps, ph2_val = Val}) ->
+                          num_responses = NumResps, ph2_val = Z}) ->
     if length(C#c.ph1_oks) /= NumResps + 1 ->
             {recv_timeout, same, C#c{num_responses = NumResps + 1}};
        true ->
+            [Val] = Z#obj.contents,
             slf_msgsim:add_utrace({counter, C#c.ph2_now, Val}),
             {recv_general, client_init, #c{}}
     end;
-client_ph2_waiting({ph1_ask_ok, ClOp, Server, Cookie, _ValDoesNotMatter} = Msg,
-                   C = #c{clop = ClOp, ph1_oks = Oks, ph2_val = Val}) ->
-    slf_msgsim:bang(Server, {ph2_do_set, slf_msgsim:self(), ClOp, Cookie, Val}),
+client_ph2_waiting({ph1_ask_ok, ClOp, Server, Cookie, _Z} = Msg,
+                   C = #c{clop = ClOp, ph1_oks = Oks, ph2_val = Z}) ->
+    slf_msgsim:bang(Server, {ph2_do_set, slf_msgsim:self(), ClOp, Cookie, Z}),
     {recv_timeout, same, C#c{ph1_oks = [Msg|Oks]}};
-client_ph2_waiting(timeout, C = #c{num_responses = NumResps, ph2_val = Val}) ->
+client_ph2_waiting(timeout, C = #c{num_responses = NumResps, ph2_val = Z}) ->
     Q = calc_q(C),
     if NumResps >= Q ->
+            [Val] = Z#obj.contents,
             slf_msgsim:add_utrace({counter, C#c.ph2_now, Val});
        true ->
             slf_msgsim:add_utrace({timeout_phase2, slf_msgsim:self()})
@@ -277,20 +276,23 @@ client_ph2_waiting(timeout, C = #c{num_responses = NumResps, ph2_val = Val}) ->
 server_unasked({ph1_ask, From, ClOp}, S = #s{cookie = undefined}) ->
     S2 = send_ask_ok(From, ClOp, S),
     {recv_timeout, server_asked, S2};
-server_unasked({ph2_do_set, From, ClOp, Cookie, Val}, S) ->
+server_unasked({ph2_do_set, From, ClOp, Cookie, Z}, S) ->
     slf_msgsim:bang(From, {error, ClOp, slf_msgsim:self(),
-                           server_unasked, Cookie, Val}),
+                           server_unasked, Cookie, Z}),
     {recv_general, same, S};
 server_unasked({ph1_cancel, From, ClOp, _Cookie}, S) ->
     %% Late arrival, tell client it's OK, but really we ignore it
     slf_msgsim:bang(From, {ph1_cancel_ok, ClOp, slf_msgsim:self()}),
     {recv_general, same, S}.
 
-server_asked({ph2_do_set, From, ClOp, Cookie, Val}, S = #s{cookie = Cookie}) ->
+server_asked({ph2_do_set, From, ClOp, Cookie, Z0},
+             S = #s{cookie = Cookie, val = Z1}) ->
+    %% If we have unreconcilable objects, something bad happened.
+    [Z] = reconcile([Z0, Z1]),
     slf_msgsim:bang(From, {ok, ClOp, slf_msgsim:self(), Cookie}),
     {recv_general, server_unasked, S#s{asker = undefined,
                                        cookie = undefined,
-                                       val = Val}};
+                                       val = Z}};
 server_asked({ph1_ask, From, ClOp}, S = #s{asker = Asker}) ->
     slf_msgsim:bang(From, {ph1_ask_sorry, ClOp, slf_msgsim:self(), Asker}),
     {recv_timeout, same, S};
@@ -306,27 +308,32 @@ server_asked(timeout, S) ->
     {recv_general, server_unasked, S#s{asker = undefined,
                                        cookie = undefined}}.
 
-send_ask_ok(From, ClOp, S = #s{val = Val}) ->
-    Cookie = {cky,now()},
-    slf_msgsim:bang(From, {ph1_ask_ok, ClOp, slf_msgsim:self(), Cookie, Val}),
+send_ask_ok(From, ClOp, S = #s{val = Z}) ->
+    Cookie = {cky, now()},
+    slf_msgsim:bang(From, {ph1_ask_ok, ClOp, slf_msgsim:self(), Cookie, Z}),
     S#s{asker = From, cookie = Cookie}.
 
 cl_p1_send_do(C = #c{clop = ClOp, ph1_oks = Oks}) ->
-    [{_, _, _, _, [MaxVal]}|_] = lists:reverse(lists:keysort(5, Oks)),
-    NewVal = [MaxVal + 1],
+    Objs = [Z || {_, _, _, _, Z} <- Oks],
+    %% If we have unreconcilable objects, something bad happened.
+    [Z] = reconcile(Objs),
+    #obj{vclock = VClock, contents = [Counter]} = Z,
+    NewCounter = Counter + 1,
+    NewZ = Z#obj{vclock = vclock:increment(slf_msgsim:self(), VClock),
+                 contents = [NewCounter]},
     %% Using erlang:now() here is naughty in the general case but OK
     %% in this particular case: we're in strictly-increasing counters
     %% over time.  erlang:now() is strictly increasing wrt time.  If
     %% we save the now() time when we've made our decision of what
-    %% NewVal should be, then we can include that timestamp in our
+    %% NewCounter should be, then we can include that timestamp in our
     %% utrace entry when phase2 is finished, and then the
     %% verify_property() function can sort the Emitted list by now()
     %% timestamps and then check for correct counter ordering.
     Now = erlang:now(),
-    [slf_msgsim:bang(Svr, {ph2_do_set, slf_msgsim:self(), ClOp, Cookie, NewVal}) ||
-        {ph1_ask_ok, _x_ClOp, Svr, Cookie, _Val} <- Oks],
+    [slf_msgsim:bang(Svr, {ph2_do_set, slf_msgsim:self(), ClOp, Cookie, NewZ})
+     || {ph1_ask_ok, _x_ClOp, Svr, Cookie, _Z} <- Oks],
     {recv_timeout, client_ph2_waiting, C#c{num_responses = 0,
-                                           ph2_val = NewVal,
+                                           ph2_val = NewZ,
                                            ph2_now = Now}}.
 
 make_val(Replies) ->
@@ -335,6 +342,35 @@ make_val(Replies) ->
 calc_q(#c{num_servers = NumServers}) ->
     (NumServers div 2) + 1.
 
+strictly_sequential([X, Y|Rest]) when X + 1 =:= Y ->
+    strictly_sequential([Y|Rest]);
+strictly_sequential([_]) ->
+    true;
+strictly_sequential([]) ->
+    true;
+strictly_sequential(_) ->
+    false.
+
+prop_strictly_sequential() ->
+    ?FORALL({Start, Len, ToRemove0}, {int(), nat(), list(int())},
+            begin
+                Seq = lists:seq(Start, Start + (Len-1)),
+                strictly_sequential(Seq) andalso
+                    if ToRemove0 == [] ->
+                            true;
+                       Seq == [] ->
+                            true;
+                       true ->
+                            [SeqFirst|_] = Seq,
+                            SeqLast = lists:last(Seq),
+                            ToRemove = lists:usort(ToRemove0) --
+                                [SeqFirst, SeqLast],
+                            NoSeq = Seq -- ToRemove,
+                            NoSeq =:= Seq orelse
+                                not strictly_sequential(NoSeq)
+                    end
+            end).
+
 %%% Misc....
 
 all_clients() ->
@@ -342,3 +378,42 @@ all_clients() ->
 
 all_servers() ->
     [s1, s2, s3, s4, s5, s6, s7, s8, s9].
+
+%%% BEGIN From riak_object.erl, also Apache Public License v2 licensed
+%%% Copyright (c) 2007-2010 Basho Technologies, Inc.  All Rights Reserved.
+%%% https://github.com/basho/riak_kv/blob/master/src/riak_object.erl
+%%% ... because a rebar dep on riak_kv pulls in *lots* of dependent repos ....
+
+ancestors(pure_baloney_to_fool_dialyzer) ->
+    [#obj{vclock = vclock:fresh()}];
+ancestors(Objects) ->
+    ToRemove = [[O2 || O2 <- Objects,
+     vclock:descends(O1#obj.vclock,O2#obj.vclock),
+     (vclock:descends(O2#obj.vclock,O1#obj.vclock) == false)]
+                || O1 <- Objects],
+    lists:flatten(ToRemove).
+
+%% @spec reconcile([riak_object()]) -> [riak_object()]
+reconcile(Objects) ->
+    All = sets:from_list(Objects),
+    Del = sets:from_list(ancestors(Objects)),
+    remove_duplicate_objects(sets:to_list(sets:subtract(All, Del))).
+
+remove_duplicate_objects(Os) -> rem_dup_objs(Os,[]).
+rem_dup_objs([],Acc) -> Acc;
+rem_dup_objs([O|Rest],Acc) ->
+    EqO = [AO || AO <- Acc, equal(AO,O) =:= true],
+    case EqO of
+        [] -> rem_dup_objs(Rest,[O|Acc]);
+        _ -> rem_dup_objs(Rest,Acc)
+    end.
+
+equal(Y, Z) ->
+    case vclock:equal(Y#obj.vclock, Z#obj.vclock) of
+        true ->
+            lists:sort(Y#obj.contents) =:= lists:sort(Y#obj.contents);
+        false ->
+            false
+    end.
+
+%%% END From riak_object.erl, also Apache Public License v2 licensed
