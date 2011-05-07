@@ -132,7 +132,6 @@ verify_property(NumClients, NumServers, _Props, F1, F2, Ops,
                length(Phase2Timeouts) andalso
                length(Emitted) == length(lists:usort(Emitted)) andalso
                Emitted == lists:sort(Emitted) andalso
-               strictly_sequential(Emitted) andalso
                Unconsumed == []
        end)))))))))))))).
 
@@ -341,35 +340,6 @@ make_val(Replies) ->
 
 calc_q(#c{num_servers = NumServers}) ->
     (NumServers div 2) + 1.
-
-strictly_sequential([X, Y|Rest]) when X + 1 =:= Y ->
-    strictly_sequential([Y|Rest]);
-strictly_sequential([_]) ->
-    true;
-strictly_sequential([]) ->
-    true;
-strictly_sequential(_) ->
-    false.
-
-prop_strictly_sequential() ->
-    ?FORALL({Start, Len, ToRemove0}, {int(), nat(), list(int())},
-            begin
-                Seq = lists:seq(Start, Start + (Len-1)),
-                strictly_sequential(Seq) andalso
-                    if ToRemove0 == [] ->
-                            true;
-                       Seq == [] ->
-                            true;
-                       true ->
-                            [SeqFirst|_] = Seq,
-                            SeqLast = lists:last(Seq),
-                            ToRemove = lists:usort(ToRemove0) --
-                                [SeqFirst, SeqLast],
-                            NoSeq = Seq -- ToRemove,
-                            NoSeq =:= Seq orelse
-                                not strictly_sequential(NoSeq)
-                    end
-            end).
 
 %%% Misc....
 
