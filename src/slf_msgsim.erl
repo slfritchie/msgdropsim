@@ -103,10 +103,9 @@ init_proc(Name, State, RecvFun) ->
 -spec make_partition_dict([partition()]) -> orddict().
 
 make_partition_dict(Ps) ->
-    Raw = [{{From, To}, N} ||
+    Raw = [{{From, To}, {Start, End}} ||
               {partition, Froms, Tos, Start, End} <- Ps,
-              From <- lists:usort(Froms), To <- lists:usort(Tos),
-              N <- lists:seq(Start, End)],
+              From <- lists:usort(Froms), To <- lists:usort(Tos)],
     lists:foldl(fun({Key, V}, D) -> orddict:append(Key, V, D) end,
                 orddict:new(), Raw).
 
@@ -141,7 +140,7 @@ bang(scheduler = Sender, Rcpt, Msg, false, S) ->
 bang(Sender, Rcpt, Msg, IncrSentP,
      #sched{partitions = PartD, delays = DelayD, step = Step} = S) ->
     DropP = case orddict:find({Sender, Rcpt}, PartD) of
-                {ok, PartSteps} -> lists:member(Step, PartSteps);
+                {ok, PartSteps} -> member_of_an_interval_p(Step, PartSteps);
                 error           -> false
             end,
     Delay = case orddict:find({Sender, Rcpt}, DelayD) of
@@ -447,6 +446,14 @@ bang(Rcpt, Msg) ->
     S = erlang:get({?MODULE, sched}),
     erlang:put({?MODULE, sched}, bang(?MODULE:self(), Rcpt, Msg, true, S)),
     Msg.
+
+member_of_an_interval_p(Step, [{Begin, End}|_])
+  when Begin =< Step, Step =< End ->
+    true;
+member_of_an_interval_p(Step, [_|Rest]) ->
+    member_of_an_interval_p(Step, Rest);
+member_of_an_interval_p(_, _) ->
+    false.
 
 %%% Test funcs
 
