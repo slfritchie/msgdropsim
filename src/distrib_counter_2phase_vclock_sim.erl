@@ -89,6 +89,7 @@ verify_property(NumClients, NumServers, _Props, F1, F2, Ops,
                 _Sched0, Runnable, Sched1, Trc, UTrc) ->
     NumMsgs = length([x || {bang,_,_,_,_} <- Trc]),
     NumDrops = length([x || {drop,_,_,_,_} <- Trc]),
+    NumDelays = length([x || {delay,_,_,_,_,_} <- Trc]),
     NumTimeouts = length([x || {recv,_,scheduler,_,timeout} <- Trc]),
     NumCrashes = length([x || {process_crash,_,_,_,_,_} <- Trc]),
     %% We need to sort the emitted events by "time", see comment
@@ -128,6 +129,7 @@ verify_property(NumClients, NumServers, _Props, F1, F2, Ops,
        measure("# ph2 t.out ", length(Phase2Timeouts),
        measure("msgs sent   ", NumMsgs,
        measure("msgs dropped", NumDrops,
+       measure("msgs delayed", NumDelays,
        measure("timeouts    ", NumTimeouts,
        begin
            Runnable == false andalso
@@ -139,7 +141,7 @@ verify_property(NumClients, NumServers, _Props, F1, F2, Ops,
                Emitted == lists:sort(Emitted) andalso
                Unconsumed == [] andalso
                NumCrashes == 0
-       end)))))))))))))).
+       end))))))))))))))).
 
 %%% Protocol implementation
 
