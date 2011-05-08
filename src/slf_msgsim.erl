@@ -491,7 +491,7 @@ t_server0_recv({echo, Pid, Msg}, St) ->
 run_proc_receive_test() ->
     Sa = t_sched0a(),
     #sched{step = 1, numsent = 1} = Sa2 = run_proc_receive(c, Sa),
-    2 = length(Sa2#sched.trace),  % One recv, one bang
+    4 = length(Sa2#sched.trace),  % One recv, one bang, two deliver
     Pa = fetch_proc(c, Sa2),
     1 = length(Pa#proc.mbox),
     undefined = Pa#proc.recv_w_timeout,
@@ -499,7 +499,7 @@ run_proc_receive_test() ->
 
     Sb = t_sched0b(),
     Sb2 = run_proc_receive(c, Sb),
-    1 = length(Sb2#sched.trace),  % One recv (the msg from init)
+    3 = length(Sb2#sched.trace),  % One recv (the msg from init), two deliver
     Pb = fetch_proc(c, Sb2),
     1 = length(Pb#proc.mbox),
     0 = queue:len(Pb#proc.outbox),
@@ -526,7 +526,7 @@ check_t_sched0a_sanity(S) ->
     Bangs = [x || {bang, _, _, _, _} <- Trace1],
     Delivers = [x || {deliver, _, _, _, _} <- Trace1],
     2 = length(RecvInits),
-    {4, 4, 4} = {length(RecvOthers), length(Bangs), length(Delivers)},
+    {4, 4, 6} = {length(RecvOthers), length(Bangs), length(Delivers)},
 
     Clnt = fetch_proc(c, S),
     hello_again = Clnt#proc.state,
