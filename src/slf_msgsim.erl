@@ -133,9 +133,11 @@ send_initial_msgs_to_procs(Ops, S0) ->
 bang(Sender, Rcpt, Msg, S) ->
     bang(Sender, Rcpt, Msg, true, S).
 
-bang(scheduler, Rcpt, Msg, false, S) ->
+bang(scheduler = Sender, Rcpt, Msg, false, S) ->
+    Trc = {deliver, S#sched.step, Sender, Rcpt, Msg},
     P = fetch_proc(Rcpt, S),
-    store_proc(P#proc{mbox = P#proc.mbox ++ [{imsg, scheduler, Rcpt, Msg}]}, S);
+    store_proc(P#proc{mbox = P#proc.mbox ++ [{imsg, scheduler, Rcpt, Msg}]},
+               add_trace(Trc, S));
 bang(Sender, Rcpt, Msg, IncrSentP,
      #sched{partitions = PartD, delays = DelayD, step = Step} = S) ->
     DropP = case orddict:find({Sender, Rcpt}, PartD) of
@@ -225,6 +227,7 @@ run_scheduler(S0, MaxIters) ->
                            fun(Proc, S) ->
                                    bang(scheduler, Proc, timeout, false, S)
                            end, S1, Waiters),
+                    %% run_scheduler(incr_step(S2), MaxIters - 1)
                     run_scheduler(S2, MaxIters - 1)
             end;
         true ->
