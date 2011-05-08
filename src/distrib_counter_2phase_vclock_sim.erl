@@ -70,9 +70,11 @@ gen_client_initial_states(NumClients, _Props) ->
 %% required
 gen_server_initial_states(NumServers, _Props) ->
     Servers = lists:sublist(all_servers(), 1, NumServers),
+    %% TODO: See comment "Item-1" below for advice on #obj.contents init'n
     [{Server,
       #s{val = #obj{vclock = vclock:fresh(),
-                    contents = [gen_nat_nat2(5, 1)]}},
+                    %% contents = [gen_nat_nat2(5, 1)]}},
+                    contents = [0]}},
       server_unasked} ||
         Server <- Servers].
 
@@ -105,11 +107,15 @@ verify_property(NumClients, NumServers, _Props, F1, F2, Ops,
     ?WHENFAIL(
        io:format("Failed:\nF1 = ~p\nF2 = ~p\nEnd2 = ~P\n"
                  "Runnable = ~p, Receivable = ~p\n"
-                 "Emitted counters = ~w\n",
+                 "Emitted counters = ~w\n"
+                 "Ops ~p ?= Emitted ~p + Phase1QuorumFails ~p + Phase1Timeouts ~p + Phase2Timeouts ~p\n"
+                 "# Unconsumed ~p, NumCrashes ~p\n",
                  [F1, F2, Sched1, 250,
                   slf_msgsim:runnable_procs(Sched1),
                   slf_msgsim:receivable_procs(Sched1),
-                  Emitted]),
+                  Emitted,
+                 length(Ops), length(Emitted), length(Phase1QuorumFails), length(Phase1Timeouts), length(Phase2Timeouts),
+                 length(Unconsumed), NumCrashes]),
        classify(NumDrops /= 0, at_least_1_msg_dropped,
        measure("clients     ", NumClients,
        measure("servers     ", NumServers,
@@ -286,8 +292,9 @@ server_unasked({ph1_cancel, From, ClOp, _Cookie}, S) ->
 
 server_asked({ph2_do_set, From, ClOp, Cookie, Z0},
              S = #s{cookie = Cookie, val = Z1}) ->
-    %% If we have unreconcilable objects, something bad happened.
-    [Z] = reconcile([Z0, Z1]),
+    Z = do_reconcile([Z0, Z1], server),
+%%    case slf_msgsim:self() of s4 -> io:format("svr ~p:\n In  ~p\nOut ~p\n", [slf_msgsim:self(), [Z0, Z1], Z]); _ -> ok end,
+%% io:format("svr ~p:\n In  ~p\nOut ~p\n", [slf_msgsim:self(), [Z0, Z1], Z]),
     slf_msgsim:bang(From, {ok, ClOp, slf_msgsim:self(), Cookie}),
     {recv_general, server_unasked, S#s{asker = undefined,
                                        cookie = undefined,
@@ -314,9 +321,39 @@ send_ask_ok(From, ClOp, S = #s{val = Z}) ->
 
 cl_p1_send_do(C = #c{clop = ClOp, ph1_oks = Oks}) ->
     Objs = [Z || {_, _, _, _, Z} <- Oks],
-    %% If we have unreconcilable objects, something bad happened.
-    [Z] = reconcile(Objs),
-    #obj{vclock = VClock, contents = [Counter]} = Z,
+    Z = do_reconcile(Objs, client),
+    Counter = case Z#obj.contents of
+                  [Cntr] ->
+                      Cntr;
+                  Cntrs ->
+                      %% So far, I've only seen this multiple contents case
+                      %% when the servers have out-of-sync counters *and* then
+                      %% are accessed by a never-seen-before client (call it
+                      %% 'C').  Due to wacky network partitions, C creates
+                      %% vclocks [{C, {1, WhateverTimestamp}}] on multiple
+                      %% servers but with different values.  Then when those
+                      %% copies are read and fed to do_reconcile(), we get
+                      %% multiple contents.  So, as long as the servers always
+                      %% start with the same starting counter value (e.g. 0),
+                      %% then we'll be OK.
+                      %% 
+                      %% TODO: This creates an interesting follow-up question,
+                      %%       though: what happens if a server crashes and
+                      %%       forgets its counter number?  I've been hoping
+                      %%       implicitly that this protocol would be able to
+                      %%       handle any such case -- that's why my
+                      %%       gen_server_initial_states() function has been
+                      %%       creating servers with wildly-differing starting
+                      %%       counter values.  However, if a server crashes
+                      %%       and re-starts with a new (and perhaps lower)
+                      %%       counter value, will bad things happen?
+                      %% Ref: Item-1
+                      %-%io:format("Oks ~p\n", [Oks]),
+                      %-%io:format("Cntrs ~p\n", [Cntrs]),
+                      [Cntr] = lists:usort(Cntrs),
+                      Cntr
+              end,
+    #obj{vclock = VClock} = Z,
     NewCounter = Counter + 1,
     NewZ = Z#obj{vclock = vclock:increment(slf_msgsim:self(), VClock),
                  contents = [NewCounter]},
@@ -349,6 +386,18 @@ get_mailbox(Proc, Sched) ->
             []
     end.            
 
+do_reconcile(Objs0, WhoIsIt) ->
+    Objs = reconcile(Objs0),
+    Contents = lists:append([Z#obj.contents || Z <- Objs]),
+    if length(Contents) > 1 ->
+            io:format("Hey: ~p, ~p -> ~p\n", [WhoIsIt, Objs0, Objs]);
+       true ->
+            ok
+    end,
+    VClock = vclock:merge([Z#obj.vclock || Z <- Objs]),
+    Obj1 = hd(Objs),
+    Obj1#obj{vclock=VClock, contents=Contents}.
+
 %%% Misc....
 
 all_clients() ->
@@ -375,7 +424,15 @@ ancestors(Objects) ->
 reconcile(Objects) ->
     All = sets:from_list(Objects),
     Del = sets:from_list(ancestors(Objects)),
-    remove_duplicate_objects(sets:to_list(sets:subtract(All, Del))).
+    XX1 = sets:to_list(sets:subtract(All, Del)),
+    XX2 = lists:reverse(lists:sort(XX1)),
+    remove_duplicate_objects(XX2).
+
+%% @spec reconcile([riak_object()]) -> [riak_object()]
+reconcile2(Objects) ->
+    All = ordsets:from_list(Objects),
+    Del = ordsets:from_list(ancestors(Objects)),
+    remove_duplicate_objects(ordsets:to_list(ordsets:subtract(All, Del))).
 
 remove_duplicate_objects(Os) -> rem_dup_objs(Os,[]).
 rem_dup_objs([],Acc) -> Acc;
