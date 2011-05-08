@@ -322,10 +322,6 @@ send_ask_ok(From, ClOp, S = #s{val = Z}) ->
 cl_p1_send_do(C = #c{clop = ClOp, ph1_oks = Oks}) ->
     Objs = [Z || {_, _, _, _, Z} <- Oks],
     Z = do_reconcile(Objs, client),
-    Counter = case Z#obj.contents of
-                  [Cntr] ->
-                      Cntr;
-                  Cntrs ->
                       %% So far, I've only seen this multiple contents case
                       %% when the servers have out-of-sync counters *and* then
                       %% are accessed by a never-seen-before client (call it
@@ -348,11 +344,7 @@ cl_p1_send_do(C = #c{clop = ClOp, ph1_oks = Oks}) ->
                       %%       and re-starts with a new (and perhaps lower)
                       %%       counter value, will bad things happen?
                       %% Ref: Item-1
-                      %-%io:format("Oks ~p\n", [Oks]),
-                      %-%io:format("Cntrs ~p\n", [Cntrs]),
-                      [Cntr] = lists:usort(Cntrs),
-                      Cntr
-              end,
+    Counter = lists:max(Z#obj.contents), %% app-specific logic here
     #obj{vclock = VClock} = Z,
     NewCounter = Counter + 1,
     NewZ = Z#obj{vclock = vclock:increment(slf_msgsim:self(), VClock),
@@ -389,11 +381,6 @@ get_mailbox(Proc, Sched) ->
 do_reconcile(Objs0, WhoIsIt) ->
     Objs = reconcile(Objs0),
     Contents = lists:append([Z#obj.contents || Z <- Objs]),
-    if length(Contents) > 1 ->
-            io:format("Hey: ~p, ~p -> ~p\n", [WhoIsIt, Objs0, Objs]);
-       true ->
-            ok
-    end,
     VClock = vclock:merge([Z#obj.vclock || Z <- Objs]),
     Obj1 = hd(Objs),
     Obj1#obj{vclock=VClock, contents=Contents}.
