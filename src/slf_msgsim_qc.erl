@@ -140,16 +140,6 @@ filter_drop(_Old, New) ->
 delete_all(X, L) ->
     [Y || Y <- L, Y /= X].
 
-apply_net_partitions(Rpcs, PartitionList) ->
-    NumRpcs = length(Rpcs),
-    lists:flatten(
-      [
-       [{drop, N, Type} || N <- lists:seq(StartN, EndN),
-                             N < NumRpcs,
-                             {_, _, rpc, ask, Svr, _} <- [lists:nth(N, Rpcs)],
-                             Svr == Server]
-       || {partition, Server, StartN, EndN, Type} <- PartitionList]).
-
 check_exact_msg_or_timeout(Clients, Predicted, Actual) ->
     lists:all(
       fun(Client) ->
