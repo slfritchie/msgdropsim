@@ -103,7 +103,7 @@ init_proc(Name, State, RecvFun) ->
 -spec make_partition_dict([partition()]) -> orddict().
 
 make_partition_dict(Ps) ->
-    Raw = [{{From, To}, {Start, End}} ||
+    Raw = [{{From, To}, {{Start, End}, -42}} ||      %% -42 = arbitrary integer
               {partition, Froms, Tos, Start, End} <- Ps,
               From <- lists:usort(Froms), To <- lists:usort(Tos)],
     lists:foldl(fun({Key, V}, D) -> orddict:append(Key, V, D) end,
@@ -112,10 +112,9 @@ make_partition_dict(Ps) ->
 -spec make_delay_dict([delay()]) -> orddict().
 
 make_delay_dict(Ps) ->
-    Raw = [{{From, To}, {N, DelaySteps}} ||
+    Raw = [{{From, To}, {{Start, End}, DelaySteps}} ||
               {delay, Froms, Tos, Start, End, DelaySteps} <- Ps,
-              From <- lists:usort(Froms), To <- lists:usort(Tos),
-              N <- lists:seq(Start, End)],
+              From <- lists:usort(Froms), To <- lists:usort(Tos)],
     lists:foldl(fun({Key, V}, D) -> orddict:append(Key, V, D) end,
                 orddict:new(), Raw).
 
@@ -140,16 +139,16 @@ bang(scheduler = Sender, Rcpt, Msg, false, S) ->
 bang(Sender, Rcpt, Msg, IncrSentP,
      #sched{partitions = PartD, delays = DelayD, step = Step} = S) ->
     DropP = case orddict:find({Sender, Rcpt}, PartD) of
-                {ok, PartSteps} -> member_of_an_interval_p(Step, PartSteps);
-                error           -> false
+                {ok, PartSteps} ->
+                    is_integer(member_of_an_interval_p(Step, PartSteps));
+                error ->
+                    false
             end,
     Delay = case orddict:find({Sender, Rcpt}, DelayD) of
                 {ok, DelayStepList} ->
-                    case lists:keyfind(Step, 1, DelayStepList) of
-                        false           -> false;
-                        {_, DelaySteps} -> DelaySteps
-                    end;
-                error            -> false
+                    member_of_an_interval_p(Step, DelayStepList);
+                error ->
+                    false
             end,
     if is_integer(Delay) ->
             Trc = {delay, S#sched.step, Sender, Rcpt, Msg, {num_rounds, Delay}},
@@ -447,9 +446,9 @@ bang(Rcpt, Msg) ->
     erlang:put({?MODULE, sched}, bang(?MODULE:self(), Rcpt, Msg, true, S)),
     Msg.
 
-member_of_an_interval_p(Step, [{Begin, End}|_])
+member_of_an_interval_p(Step, [{{Begin, End}, Result}|_])
   when Begin =< Step, Step =< End ->
-    true;
+    Result;
 member_of_an_interval_p(Step, [_|Rest]) ->
     member_of_an_interval_p(Step, Rest);
 member_of_an_interval_p(_, _) ->
