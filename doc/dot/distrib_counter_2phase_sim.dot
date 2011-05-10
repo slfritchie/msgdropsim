@@ -1,0 +1,62 @@
+// dot -Tpng -o distrib_counter_2phase_sim.png distrib_counter_2phase_sim.dot
+
+digraph data_flow {
+    start [label="Two-phase protocol: ask+set FSM\nPhase 1: Servers are asked for permission to modify a value.\nIf permission is granted, other clients will be denied until successful Phase 2 or Phase 1 cancel.\nPhase 2: Send 'set' command to all servers that gave us successful Phase 1 replies.\n(OK for correctness but fairness not guaranteed)"];
+
+    init_ask_phase [label="client_init:"];
+
+    ask_phase [shape=box, label="Create monitors\nSend 'ask' commands"];
+
+    ph1_waiting [label="ph1_waiting:\nWaiting for 'ask' command results"];
+
+    cancel_phase [shape=box, label="Send Phase 1 'cancel' commands to all\nservers that gave us successful Phase 1 replies"];
+
+    server_unasked [label="server_unasked"];
+    server_asked [label="server_asked"];
+
+    {rank=same; init_ask_phase server_unasked};
+    {rank=same; cancel_phase set_phase};
+    {rank=same; ph1_cancelling ph2_waiting};
+
+    ph1_cancelling [label="ph1_cancelling:\nWaiting for Phase 1 'cancel' results"];
+
+    set_phase [shape=box, label="send sets:\nSend Phase 2 'set' commands to all\nservers that gave us successful Phase 1 replies"];
+
+    ph2_waiting [label="ph2_waiting:\nWaiting for 'set' command results"];
+
+    finished [label="finished:\nSend ok to client\nStop normal"];
+    error [label="error:\nQuorum majority not possible/failed\nSend error to client\nStop normal"];
+
+    start -> init_ask_phase;
+
+    init_ask_phase -> ask_phase; // [label="init()'s next state"];
+    ask_phase -> ph1_waiting; // [label="init()'s next state"];
+
+    ph1_waiting -> ph1_waiting [label="Server reply X"];
+    ph1_waiting -> ph1_waiting [label="DOWN" headport=w tailport=w];
+    ph1_waiting -> error [label="DOWN or\ntimeout or\nServer reply sorry"]; // headport=n tailport=se];
+    ph1_waiting -> cancel_phase [label="DOWN or\ntimeout or\nServer reply X"];
+    // ph1_waiting -> error [label="Server reply error"];
+    ph1_waiting -> set_phase [label="Server reply X\nWe have quorum of ok replies"]; //tailport=sw];
+
+    set_phase -> ph2_waiting;
+
+    ph1_cancelling -> ph1_cancelling [label="Server reply ok\nor DOWN"];
+    ph1_cancelling -> error [label="Server reply ok\nor DOWN"];
+    // ph1_cancelling -> error [label="DOWN"]; // headport=n tailport=se];
+    ph1_cancelling -> cancel_phase [label="timeout" headport=n];
+
+    cancel_phase -> ph1_cancelling;
+
+    ph2_waiting -> ph2_waiting [label="Server reply ok\nor DOWN"]
+    ph2_waiting -> finished [label="Server reply ok"];
+    ph2_waiting -> set_phase [label="timeout" headport=n];
+    ph2_waiting -> error [label="DOWN"];
+
+    server_unasked -> server_asked [label="phase1 ask -> ok"];
+    server_unasked -> server_unasked [label="phase2 set -> error\nphase1 cancel -> ok"];
+    //server_unasked -> server_unasked [label=""];
+
+    server_asked -> server_unasked [label="phase2 set -> ok"];
+    server_asked -> server_asked [label="phase2 set (wrong client) -> error\nphase1 ask -> sorry\nphase1 cancel (wrong client) -> ok"];
+};
