@@ -446,12 +446,6 @@ reconcile(Objects) ->
     XX2 = lists:reverse(lists:sort(XX1)),
     remove_duplicate_objects(XX2).
 
-%% @spec reconcile([riak_object()]) -> [riak_object()]
-reconcile2(Objects) ->
-    All = ordsets:from_list(Objects),
-    Del = ordsets:from_list(ancestors(Objects)),
-    remove_duplicate_objects(ordsets:to_list(ordsets:subtract(All, Del))).
-
 remove_duplicate_objects(Os) -> rem_dup_objs(Os,[]).
 rem_dup_objs([],Acc) -> Acc;
 rem_dup_objs([O|Rest],Acc) ->
