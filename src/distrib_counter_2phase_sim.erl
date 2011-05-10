@@ -43,7 +43,7 @@
          }).
 
 t(MaxClients, MaxServers) ->
-    eqc:quickcheck(slf_msgsim_qc:prop_simulate(distrib_counter_2phase_sim, [{max_clients, MaxClients}, {max_servers, MaxServers}, disable_partitions])).
+    eqc:quickcheck(slf_msgsim_qc:prop_simulate(?MODULE, [{max_clients, MaxClients}, {max_servers, MaxServers}, disable_partitions])).
 
 %%% Generators
 
