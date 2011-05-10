@@ -5,7 +5,7 @@ digraph data_flow {
 
     init_ask_phase [label="client_init:"];
 
-    ask_phase [shape=box, label="Create monitors\nSend 'ask' commands"];
+    ask_phase [shape=box, label="Send 'ask' commands"];
 
     ph1_waiting [label="ph1_waiting:\nWaiting for 'ask' command results"];
 
