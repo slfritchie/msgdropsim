@@ -135,9 +135,6 @@ arrest me.)
 Future work
 -----------
 
-* Fully implement the delayed message feature.  The framework is
-  there, but the only-slightly-tricky bit of maintaining Erlang
-  message ordering guarantees needs to be done.
 * Add support for simulated Erlang monitors, Erlang's method for
   informing processes that messages may have been dropped.
 * Investigate integration of message dropping (and perhaps also
