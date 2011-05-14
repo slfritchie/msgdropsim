@@ -265,15 +265,14 @@ client_init(T, C) when is_tuple(T) ->
 
 client_ph1_waiting({ph1_ask_ok, ClOp, _Server, _Cookie, _Z} = Msg,
                    C = #c{clop = ClOp, num_responses = Resps, ph1_oks = Oks}) ->
-    cl_p1_next_step(false, C#c{num_responses = Resps + 1,
-                               ph1_oks       = [Msg|Oks]});
+    cl_p1_next_step(C#c{num_responses = Resps + 1, ph1_oks = [Msg|Oks]});
 client_ph1_waiting({ph1_ask_sorry, ClOp, _Server, _LuckyClient} = Msg,
                    C = #c{clop = ClOp,
                           num_responses = Resps, ph1_sorrys = Sorrys}) ->
-    cl_p1_next_step(false, C#c{num_responses = Resps + 1,
-                               ph1_sorrys    = [Msg|Sorrys]});
+    cl_p1_next_step(C#c{num_responses = Resps + 1, ph1_sorrys = [Msg|Sorrys]});
 client_ph1_waiting(timeout, C) ->
-    cl_p1_next_step(true, C).
+    %% Fake like we got responses from all servers ... plus a few extra.
+    cl_p1_next_step(C#c{num_responses = 9999999999}).
 
 client_ph1_cancelling({ph1_cancel_ok, ClOp, Server},
                       C = #c{clop = ClOp, ph1_oks = Oks}) ->
@@ -286,10 +285,7 @@ client_ph1_cancelling({ph1_cancel_ok, ClOp, Server},
 client_ph1_cancelling(timeout, C) ->
     cl_p1_send_cancels(C).
 
-cl_p1_next_step(true = _TimeoutHappened, _C) ->
-    slf_msgsim:add_utrace({timeout_phase1, slf_msgsim:self()}),
-    {recv_general, client_init, #c{}};
-cl_p1_next_step(false, C = #c{num_responses = NumResps}) ->
+cl_p1_next_step(C = #c{num_responses = NumResps}) ->
     Q = calc_q(C),
     if NumResps >= Q ->
             NumOks = length(C#c.ph1_oks),
