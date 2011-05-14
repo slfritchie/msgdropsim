@@ -449,9 +449,15 @@ client_watch_waiting({watch_notify_maybe_req, ClOp, From}, #c{clop = ClOp}) ->
     slf_msgsim:add_utrace({notify_maybe_YYY, todo}),
     slf_msgsim:bang(From, {watch_notify_maybe_resp, slf_msgsim:self(), ClOp, ok}),
     {recv_general, client_init, #c{}};
-client_watch_waiting(timeout, _C) ->
+client_watch_waiting({watch_setup_resp, ClOp, _Server, ok} = Msg,
+                     C = #c{clop = ClOp,
+                            num_responses = NumResps0, ph1_oks = Oks0}) ->
+    NumResps = NumResps0 + 1,
+    Oks = [Msg|Oks0],
+    {recv_timeout, same, C#c{num_responses = NumResps, ph1_oks = Oks}};
+client_watch_waiting(timeout, C) ->
     slf_msgsim:add_utrace({watch_timeout, todo}),
-    {recv_general, client_init, #c{}}.
+    cl_watch_send_cancels(C).
 
 %%% Server counter-related states
 
