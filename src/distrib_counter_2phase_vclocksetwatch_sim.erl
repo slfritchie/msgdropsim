@@ -401,7 +401,7 @@ client_watch_setup({watch_setup_resp, _ClOp, _Server, _}, C) ->
     %% late message
     {recv_timeout, same, C};
 client_watch_setup(timeout, C) ->
-    slf_msgsim:add_utrace({watch_timeout, slf_msgsim:self()}),
+    slf_msgsim:add_utrace({watch_setup_timeout, slf_msgsim:self()}),
     cl_watch_send_cancels(C).
 
 cl_watch_send_cancels(C = #c{clop = ClOp, ph1_oks = Oks}) ->
@@ -439,6 +439,7 @@ client_watch_cancelling({watch_cancel_resp, _ClOp, _Server, _}, C) ->
     %% late arrival
     {recv_timeout, same, C};
 client_watch_cancelling(timeout, C) ->
+    slf_msgsim:add_utrace({watch_cancelling_timeout, slf_msgsim:self()}),
     cl_watch_send_cancels(C).
 
 client_watch_waiting({watch_notify_req, ClOp, From}, #c{clop = ClOp}) ->
@@ -526,7 +527,16 @@ server_change_notif_fromsetter({watch_notifies_delivered, Watchers},
                                        watchers = Ws -- Watchers}};
 server_change_notif_fromsetter(timeout, S) ->
     NewS = sv_send_maybe_notifications(S),
-    {recv_timeout, server_change_notif_toindividuals, NewS}.
+    {recv_timeout, server_change_notif_toindividuals, NewS};
+%% Due to a 1-way network partition, a client might repeatedly send us a
+%% zillion watch setup/cancel requests, but our replies are dropped, so
+%% they resend.  The simulator can require more than 10K simulator steps
+%% to catch up, so we'll consume those things here just to make less
+%% catch up work.
+server_change_notif_fromsetter({watch_setup_req, _From, _ClOp} = Msg, S) ->
+    {recv_timeout, same, sv_watch_setup(Msg, S)};
+server_change_notif_fromsetter({watch_cancel_req, _From, _ClOp} = Msg, S) ->
+    {recv_timeout, same, sv_watch_cancel(Msg, S)}.
 
 server_change_notif_toindividuals({watch_notify_maybe_resp, From, ClOp, ok},
                                   S = #s{watchers = Ws}) ->
@@ -538,9 +548,24 @@ server_change_notif_toindividuals({watch_notify_maybe_resp, From, ClOp, ok},
         NewWs ->
             {recv_timeout, same, S#s{watchers = NewWs}}
     end;
-server_change_notif_toindividuals(timeout, S) ->
-    NewS = sv_send_maybe_notifications(S),
-    {recv_timeout, same, NewS}.
+server_change_notif_toindividuals(timeout, S = #s{watchers = Ws}) ->
+    if Ws == [] ->
+            {recv_general, server_unasked, S#s{asker = undefined,
+                                               cookie = undefined,
+                                               watchers = []}};
+       true ->
+            NewS = sv_send_maybe_notifications(S),
+            {recv_timeout, same, NewS}
+    end;
+%% Due to a 1-way network partition, a client might repeatedly send us a
+%% zillion watch setup/cancel requests, but our replies are dropped, so
+%% they resend.  The simulator can require more than 10K simulator steps
+%% to catch up, so we'll consume those things here just to make less
+%% catch up work.
+server_change_notif_toindividuals({watch_setup_req, _From, _ClOp} = Msg, S) ->
+    {recv_timeout, same, sv_watch_setup(Msg, S)};
+server_change_notif_toindividuals({watch_cancel_req, _From, _ClOp} = Msg, S) ->
+    {recv_timeout, same, sv_watch_cancel(Msg, S)}.
 
 sv_watch_setup({watch_setup_req, From, ClOp}, S = #s{watchers = Ws}) ->
     slf_msgsim:bang(From, {watch_setup_resp, ClOp, slf_msgsim:self(), ok}),
