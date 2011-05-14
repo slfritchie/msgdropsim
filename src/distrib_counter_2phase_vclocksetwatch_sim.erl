@@ -128,6 +128,8 @@ verify_property(NumClients, NumServers, _Props, F1, F2, Ops,
     UncondNew   = length([x || {_,_,{unconditional_set, new}} <- UTrc]),
     UncondOther = length([x || {_,_,{unconditional_set, other}} <- UTrc]),
     WatchTimeouts = length([x || {_,_,{watch_timeout, _}} <- UTrc]),
+    WatchOks = length([x || {_,_,{watch, _}} <- UTrc]),
+    WatchMaybes = length([x || {_,_,{watch_maybe, _}} <- UTrc]),
     ?WHENFAIL(
        io:format("Failed:\nF1 = ~p\nF2 = ~p\nEnd2 = ~P\n"
                  "Runnable = ~p, Receivable = ~p\n"
@@ -160,6 +162,8 @@ verify_property(NumClients, NumServers, _Props, F1, F2, Ops,
        measure("uncond=new  ", UncondNew,
        measure("uncond=other", UncondOther,
        measure("watch ops   ", length(WatchOps),
+       measure("watch oks   ", WatchOks,
+       measure("watch maybes", WatchMaybes,
        measure("watch t.out ", WatchTimeouts,
        begin
            %% TODO: verify properties of watcher utrace output!
@@ -172,7 +176,7 @@ verify_property(NumClients, NumServers, _Props, F1, F2, Ops,
                Emitted == lists:sort(Emitted) andalso
                Unconsumed == [] andalso
                NumCrashes == 0
-       end)))))))))))))))))))))).
+       end)))))))))))))))))))))))).
 
 %%% Protocol implementation
 
@@ -440,11 +444,12 @@ client_watch_cancelling(timeout, C) ->
     cl_watch_send_cancels(C).
 
 client_watch_waiting({watch_notify_req, ClOp, From}, #c{clop = ClOp}) ->
-    slf_msgsim:add_utrace({notifyYYY, todo}),
+    slf_msgsim:add_utrace({watch, todo}),
     slf_msgsim:bang(From, {watch_notify_resp, slf_msgsim:self(), ClOp, ok}),
     {recv_general, client_init, #c{}};
 client_watch_waiting({watch_notify_maybe_req, ClOp, From}, #c{clop = ClOp}) ->
-    slf_msgsim:add_utrace({notify_maybe_YYY, todo}),
+    io:format("m"),
+    slf_msgsim:add_utrace({watch_maybe, todo}),
     slf_msgsim:bang(From, {watch_notify_maybe_resp, slf_msgsim:self(), ClOp, ok}),
     {recv_general, client_init, #c{}};
 client_watch_waiting({watch_setup_resp, ClOp, _Server, ok} = Msg,
