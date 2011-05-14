@@ -477,9 +477,9 @@ server_unasked({ph1_cancel, From, ClOp, _Cookie}, S) ->
     slf_msgsim:bang(From, {ph1_cancel_ok, ClOp, slf_msgsim:self()}),
     {recv_general, same, S};
 server_unasked({watch_setup_req, _From, _ClOp} = Msg, S) ->
-    {recv_timeout, same, sv_watch_setup(Msg, S)};
+    {recv_general, same, sv_watch_setup(Msg, S)};
 server_unasked({watch_cancel_req, _From, _ClOp} = Msg, S) ->
-    {recv_timeout, same, sv_watch_cancel(Msg, S)};
+    {recv_general, same, sv_watch_cancel(Msg, S)};
 server_unasked({watch_notifies_delivered, _Ws}, S) ->
     {recv_general, same, S};
 server_unasked({watch_notify_maybe_resp, _From, _ClOp, ok}, S) ->
