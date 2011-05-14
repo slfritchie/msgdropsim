@@ -249,9 +249,6 @@ client_init({watch_notify_maybe_req, ClOp, From}, C) ->
     slf_msgsim:bang(From, {watch_notify_maybe_resp,
                            slf_msgsim:self(), ClOp, ok}),
     {recv_general, same, C};
-client_init(timeout, C) ->
-    %% SLF TODO: Hrm, I'm not so certain that this clause is a good thing....
-    {recv_general, same, C};
 client_init(T, C) when is_tuple(T) ->
     %% In all other client states, our receive contain a guard based
     %% on ClOp, so any message that we see here in client_init that
