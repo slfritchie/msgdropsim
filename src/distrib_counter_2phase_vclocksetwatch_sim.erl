@@ -308,6 +308,10 @@ cl_p1_send_cancels(C = #c{clop = ClOp, ph1_oks = Oks}) ->
         {ph1_ask_ok, _ClOp, Server, Cookie, _Z} <- Oks],
     {recv_timeout, client_ph1_cancelling, C}.
 
+%% TODO: Is it necessary for for _all_ of the client counter-related
+%%       states to explicitly handle the watch_notify*_req messages to
+%%       avoid deadlock?  See commit log for more deadlock info....
+
 client_ph2_waiting({ph2_ok, ClOp, Watchers},
                    C = #c{clop = ClOp,
                           num_responses = NumResps, ph2_val = Z,
@@ -555,6 +559,10 @@ server_change_notif_toindividuals(timeout, S = #s{watchers = Ws}) ->
             NewS = sv_send_maybe_notifications(S),
             {recv_timeout, same, NewS}
     end;
+server_change_notif_toindividuals({ph1_cancel, From, ClOp, _Cookie}, S) ->
+    %% Late arrival, tell client it's OK, but really we ignore it
+    slf_msgsim:bang(From, {ph1_cancel_ok, ClOp, slf_msgsim:self()}),
+    {recv_timeout, same, S};
 %% Due to a 1-way network partition, a client might repeatedly send us a
 %% zillion watch setup/cancel requests, but our replies are dropped, so
 %% they resend.  The simulator can require more than 10K simulator steps
