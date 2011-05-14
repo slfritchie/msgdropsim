@@ -1,0 +1,392 @@
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<svg version="1.1"
+ viewBox="0 0 600 919"
+ xmlns="http://www.w3.org/2000/svg" shape-rendering="crispEdges"
+ stroke-width="1" text-rendering="geometricPrecision">
+<polygon fill="white" points="31,6 87,6 87,16 31,16"/>
+<text x="60" y="15" textLength="55" font-family="Helvetica" font-size="12" fill="black" text-anchor="middle">
+
+Set_Client
+</text>
+<polygon fill="white" points="157,6 201,6 201,16 157,16"/>
+<text x="180" y="15" textLength="42" font-family="Helvetica" font-size="12" fill="black" text-anchor="middle">
+
+Server1
+</text>
+<polygon fill="white" points="277,6 321,6 321,16 277,16"/>
+<text x="300" y="15" textLength="42" font-family="Helvetica" font-size="12" fill="black" text-anchor="middle">
+
+Server2
+</text>
+<polygon fill="white" points="397,6 441,6 441,16 397,16"/>
+<text x="420" y="15" textLength="42" font-family="Helvetica" font-size="12" fill="black" text-anchor="middle">
+
+Server3
+</text>
+<polygon fill="white" points="503,6 575,6 575,16 503,16"/>
+<text x="540" y="15" textLength="71" font-family="Helvetica" font-size="12" fill="black" text-anchor="middle">
+
+Watch_Client
+</text>
+<line x1="60" y1="22" x2="60" y2="49" stroke="black"/>
+<line x1="180" y1="22" x2="180" y2="49" stroke="black"/>
+<line x1="300" y1="22" x2="300" y2="49" stroke="black"/>
+<line x1="420" y1="22" x2="420" y2="49" stroke="black"/>
+<line x1="540" y1="22" x2="540" y2="49" stroke="black"/>
+<polygon fill="white" points="189,29 410,29 410,39 189,39"/>
+<text x="190" y="38" textLength="219" font-family="Helvetica" font-size="12" fill="black">
+All scenarios share a common first phase
+</text>
+<line x1="30" y1="35" x2="189" y2="35" stroke="black" stroke-dasharray="2,2"/>
+<line x1="412" y1="35" x2="570" y2="35" stroke="black" stroke-dasharray="2,2"/>
+<line x1="60" y1="49" x2="60" y2="76" stroke="black"/>
+<line x1="180" y1="49" x2="180" y2="76" stroke="black"/>
+<line x1="300" y1="49" x2="300" y2="76" stroke="black"/>
+<line x1="420" y1="49" x2="420" y2="76" stroke="black"/>
+<line x1="540" y1="49" x2="540" y2="76" stroke="black"/>
+<line x1="540" y1="62" x2="300" y2="62" stroke="black"/>
+<line x1="300" y1="62" x2="310" y2="68" stroke="black"/>
+<polygon fill="white" points="365,51 474,51 474,61 365,61"/>
+<text x="366" y="60" textLength="107" font-family="Helvetica" font-size="12" fill="black">
+watch setup request
+</text>
+<line x1="60" y1="76" x2="60" y2="103" stroke="black"/>
+<line x1="180" y1="76" x2="180" y2="103" stroke="black"/>
+<line x1="300" y1="76" x2="300" y2="103" stroke="black"/>
+<line x1="420" y1="76" x2="420" y2="103" stroke="black"/>
+<line x1="540" y1="76" x2="540" y2="103" stroke="black"/>
+<line x1="300" y1="89" x2="540" y2="89" stroke="black"/>
+<line x1="540" y1="89" x2="530" y2="95" stroke="black"/>
+<polygon fill="white" points="377,78 462,78 462,88 377,88"/>
+<text x="378" y="87" textLength="83" font-family="Helvetica" font-size="12" fill="black">
+watch setup: ok
+</text>
+<line x1="60" y1="103" x2="60" y2="130" stroke="black"/>
+<line x1="180" y1="103" x2="180" y2="130" stroke="black"/>
+<line x1="300" y1="103" x2="300" y2="130" stroke="black"/>
+<line x1="420" y1="103" x2="420" y2="130" stroke="black"/>
+<line x1="540" y1="103" x2="540" y2="130" stroke="black"/>
+<line x1="540" y1="116" x2="420" y2="116" stroke="black"/>
+<line x1="420" y1="116" x2="430" y2="122" stroke="black"/>
+<polygon fill="white" points="425,105 534,105 534,115 425,115"/>
+<text x="426" y="114" textLength="107" font-family="Helvetica" font-size="12" fill="black">
+watch setup request
+</text>
+<line x1="60" y1="130" x2="60" y2="157" stroke="black"/>
+<line x1="180" y1="130" x2="180" y2="157" stroke="black"/>
+<line x1="300" y1="130" x2="300" y2="157" stroke="black"/>
+<line x1="420" y1="130" x2="420" y2="157" stroke="black"/>
+<line x1="540" y1="130" x2="540" y2="157" stroke="black"/>
+<line x1="420" y1="143" x2="540" y2="143" stroke="black"/>
+<line x1="540" y1="143" x2="530" y2="149" stroke="black"/>
+<polygon fill="white" points="437,132 522,132 522,142 437,142"/>
+<text x="438" y="141" textLength="83" font-family="Helvetica" font-size="12" fill="black">
+watch setup: ok
+</text>
+<line x1="60" y1="157" x2="60" y2="184" stroke="black"/>
+<line x1="180" y1="157" x2="180" y2="184" stroke="black"/>
+<line x1="300" y1="157" x2="300" y2="184" stroke="black"/>
+<line x1="420" y1="157" x2="420" y2="184" stroke="black"/>
+<line x1="540" y1="157" x2="540" y2="184" stroke="black"/>
+<line x1="60" y1="170" x2="180" y2="170" stroke="black"/>
+<line x1="180" y1="170" x2="170" y2="176" stroke="black"/>
+<polygon fill="white" points="89,159 150,159 150,169 89,169"/>
+<text x="90" y="168" textLength="59" font-family="Helvetica" font-size="12" fill="black">
+set request
+</text>
+<line x1="60" y1="184" x2="60" y2="211" stroke="black"/>
+<line x1="180" y1="184" x2="180" y2="211" stroke="black"/>
+<line x1="300" y1="184" x2="300" y2="211" stroke="black"/>
+<line x1="420" y1="184" x2="420" y2="211" stroke="black"/>
+<line x1="540" y1="184" x2="540" y2="211" stroke="black"/>
+<line x1="60" y1="197" x2="300" y2="197" stroke="black"/>
+<line x1="300" y1="197" x2="290" y2="203" stroke="black"/>
+<polygon fill="white" points="149,186 210,186 210,196 149,196"/>
+<text x="150" y="195" textLength="59" font-family="Helvetica" font-size="12" fill="black">
+set request
+</text>
+<line x1="60" y1="211" x2="60" y2="238" stroke="black"/>
+<line x1="180" y1="211" x2="180" y2="238" stroke="black"/>
+<line x1="300" y1="211" x2="300" y2="238" stroke="black"/>
+<line x1="420" y1="211" x2="420" y2="238" stroke="black"/>
+<line x1="540" y1="211" x2="540" y2="238" stroke="black"/>
+<line x1="300" y1="224" x2="60" y2="224" stroke="black"/>
+<line x1="60" y1="224" x2="70" y2="230" stroke="black"/>
+<polygon fill="white" points="81,213 278,213 278,223 81,223"/>
+<text x="82" y="222" textLength="195" font-family="Helvetica" font-size="12" fill="black">
+set request: ok + notify Watch_Client
+</text>
+<line x1="60" y1="238" x2="60" y2="265" stroke="black"/>
+<line x1="180" y1="238" x2="180" y2="265" stroke="black"/>
+<line x1="300" y1="238" x2="300" y2="265" stroke="black"/>
+<line x1="420" y1="238" x2="420" y2="265" stroke="black"/>
+<line x1="540" y1="238" x2="540" y2="265" stroke="black"/>
+<line x1="180" y1="251" x2="60" y2="251" stroke="black"/>
+<line x1="60" y1="251" x2="70" y2="257" stroke="black"/>
+<polygon fill="white" points="37,240 202,240 202,250 37,250"/>
+<text x="38" y="249" textLength="163" font-family="Helvetica" font-size="12" fill="black">
+set request: ok + notify nobody
+</text>
+<line x1="60" y1="265" x2="60" y2="292" stroke="black"/>
+<line x1="180" y1="265" x2="180" y2="292" stroke="black"/>
+<line x1="300" y1="265" x2="300" y2="292" stroke="black"/>
+<line x1="420" y1="265" x2="420" y2="292" stroke="black"/>
+<line x1="540" y1="265" x2="540" y2="292" stroke="black"/>
+<polygon fill="white" points="142,272 456,272 456,282 142,282"/>
+<text x="143" y="281" textLength="312" font-family="Helvetica" font-size="12" fill="black">
+Scenario #1: no process crashes and no network partitions
+</text>
+<line x1="30" y1="278" x2="142" y2="278" stroke="black" stroke-dasharray="2,2"/>
+<line x1="458" y1="278" x2="570" y2="278" stroke="black" stroke-dasharray="2,2"/>
+<line x1="60" y1="292" x2="60" y2="319" stroke="black"/>
+<line x1="180" y1="292" x2="180" y2="319" stroke="black"/>
+<line x1="300" y1="292" x2="300" y2="319" stroke="black"/>
+<line x1="420" y1="292" x2="420" y2="319" stroke="black"/>
+<line x1="540" y1="292" x2="540" y2="319" stroke="black"/>
+<line x1="60" y1="305" x2="540" y2="305" stroke="black"/>
+<line x1="540" y1="305" x2="530" y2="311" stroke="black"/>
+<polygon fill="white" points="241,294 357,294 357,304 241,304"/>
+<text x="242" y="303" textLength="114" font-family="Helvetica" font-size="12" fill="black">
+change notify request
+</text>
+<line x1="60" y1="319" x2="60" y2="346" stroke="black"/>
+<line x1="180" y1="319" x2="180" y2="346" stroke="black"/>
+<line x1="300" y1="319" x2="300" y2="346" stroke="black"/>
+<line x1="420" y1="319" x2="420" y2="346" stroke="black"/>
+<line x1="540" y1="319" x2="540" y2="346" stroke="black"/>
+<line x1="540" y1="332" x2="60" y2="332" stroke="black"/>
+<line x1="60" y1="332" x2="70" y2="338" stroke="black"/>
+<polygon fill="white" points="253,321 345,321 345,331 253,331"/>
+<text x="254" y="330" textLength="90" font-family="Helvetica" font-size="12" fill="black">
+change notify: ok
+</text>
+<line x1="60" y1="346" x2="60" y2="373" stroke="black"/>
+<line x1="180" y1="346" x2="180" y2="373" stroke="black"/>
+<line x1="300" y1="346" x2="300" y2="373" stroke="black"/>
+<line x1="420" y1="346" x2="420" y2="373" stroke="black"/>
+<line x1="540" y1="346" x2="540" y2="373" stroke="black"/>
+<line x1="60" y1="359" x2="300" y2="359" stroke="black"/>
+<line x1="300" y1="359" x2="290" y2="365" stroke="black"/>
+<polygon fill="white" points="86,348 273,348 273,358 86,358"/>
+<text x="87" y="357" textLength="185" font-family="Helvetica" font-size="12" fill="black">
+change notify sent to Watch_Client
+</text>
+<line x1="60" y1="373" x2="60" y2="400" stroke="black"/>
+<line x1="180" y1="373" x2="180" y2="400" stroke="black"/>
+<line x1="300" y1="373" x2="300" y2="400" stroke="black"/>
+<line x1="420" y1="373" x2="420" y2="400" stroke="black"/>
+<line x1="540" y1="373" x2="540" y2="400" stroke="black"/>
+<polygon fill="white" points="213,380 386,380 386,390 213,390"/>
+<text x="214" y="389" textLength="171" font-family="Helvetica" font-size="12" fill="black">
+Scenario #2: Set_Client crashes
+</text>
+<line x1="30" y1="386" x2="213" y2="386" stroke="black" stroke-dasharray="2,2"/>
+<line x1="388" y1="386" x2="570" y2="386" stroke="black" stroke-dasharray="2,2"/>
+<line x1="60" y1="400" x2="60" y2="427" stroke="black"/>
+<line x1="180" y1="400" x2="180" y2="427" stroke="black"/>
+<line x1="300" y1="400" x2="300" y2="427" stroke="black"/>
+<line x1="420" y1="400" x2="420" y2="427" stroke="black"/>
+<line x1="540" y1="400" x2="540" y2="427" stroke="black"/>
+<polygon fill="white" points="162,407 437,407 437,417 162,417"/>
+<text x="163" y="416" textLength="273" font-family="Helvetica" font-size="12" fill="black">
+OR: 'change notify sent' async message is dropped
+</text>
+<line x1="30" y1="413" x2="162" y2="413" stroke="black" stroke-dasharray="2,2"/>
+<line x1="439" y1="413" x2="570" y2="413" stroke="black" stroke-dasharray="2,2"/>
+<line x1="60" y1="427" x2="60" y2="454" stroke="black"/>
+<line x1="180" y1="427" x2="180" y2="454" stroke="black"/>
+<line x1="300" y1="427" x2="300" y2="454" stroke="black"/>
+<line x1="420" y1="427" x2="420" y2="454" stroke="black"/>
+<line x1="540" y1="427" x2="540" y2="454" stroke="black"/>
+<polygon fill="white" points="138,434 460,434 460,444 138,444"/>
+<text x="139" y="443" textLength="320" font-family="Helvetica" font-size="12" fill="black">
+OR: Network partition between Set_Client and Watch_Client
+</text>
+<line x1="30" y1="440" x2="138" y2="440" stroke="black" stroke-dasharray="2,2"/>
+<line x1="462" y1="440" x2="570" y2="440" stroke="black" stroke-dasharray="2,2"/>
+<line x1="60" y1="454" x2="60" y2="481" stroke="black"/>
+<line x1="180" y1="454" x2="180" y2="481" stroke="black"/>
+<line x1="300" y1="454" x2="300" y2="481" stroke="black"/>
+<line x1="420" y1="454" x2="420" y2="481" stroke="black"/>
+<line x1="540" y1="454" x2="540" y2="481" stroke="black"/>
+<path d="M 300 460 A60,6 0 0,1 299,473" stroke="black" fill="none"/><line x1="300" y1="473" x2="310" y2="479" stroke="black"/>
+<polygon fill="white" points="17,456 298,456 298,466 17,466"/>
+<text x="18" y="465" textLength="279" font-family="Helvetica" font-size="12" fill="black">
+Timeout watiting for 'change notify sent' confirmation
+</text>
+<line x1="60" y1="481" x2="60" y2="508" stroke="black"/>
+<line x1="180" y1="481" x2="180" y2="508" stroke="black"/>
+<line x1="300" y1="481" x2="300" y2="508" stroke="black"/>
+<line x1="420" y1="481" x2="420" y2="508" stroke="black"/>
+<line x1="540" y1="481" x2="540" y2="508" stroke="black"/>
+<line x1="300" y1="494" x2="540" y2="494" stroke="black"/>
+<line x1="540" y1="494" x2="530" y2="500" stroke="black"/>
+<polygon fill="white" points="361,483 477,483 477,493 361,493"/>
+<text x="362" y="492" textLength="114" font-family="Helvetica" font-size="12" fill="black">
+change notify request
+</text>
+<line x1="60" y1="508" x2="60" y2="535" stroke="black"/>
+<line x1="180" y1="508" x2="180" y2="535" stroke="black"/>
+<line x1="300" y1="508" x2="300" y2="535" stroke="black"/>
+<line x1="420" y1="508" x2="420" y2="535" stroke="black"/>
+<line x1="540" y1="508" x2="540" y2="535" stroke="black"/>
+<line x1="540" y1="521" x2="300" y2="521" stroke="black"/>
+<line x1="300" y1="521" x2="310" y2="527" stroke="black"/>
+<polygon fill="white" points="373,510 465,510 465,520 373,520"/>
+<text x="374" y="519" textLength="90" font-family="Helvetica" font-size="12" fill="black">
+change notify: ok
+</text>
+<line x1="60" y1="535" x2="60" y2="562" stroke="black"/>
+<line x1="180" y1="535" x2="180" y2="562" stroke="black"/>
+<line x1="300" y1="535" x2="300" y2="562" stroke="black"/>
+<line x1="420" y1="535" x2="420" y2="562" stroke="black"/>
+<line x1="540" y1="535" x2="540" y2="562" stroke="black"/>
+<polygon fill="white" points="149,542 449,542 449,552 149,552"/>
+<text x="150" y="551" textLength="298" font-family="Helvetica" font-size="12" fill="black">
+Scenario #3: Both Set_Client and Server2 have crashed
+</text>
+<line x1="30" y1="548" x2="149" y2="548" stroke="black" stroke-dasharray="2,2"/>
+<line x1="451" y1="548" x2="570" y2="548" stroke="black" stroke-dasharray="2,2"/>
+<line x1="60" y1="562" x2="60" y2="589" stroke="black"/>
+<line x1="180" y1="562" x2="180" y2="589" stroke="black"/>
+<line x1="300" y1="562" x2="300" y2="589" stroke="black"/>
+<line x1="420" y1="562" x2="420" y2="589" stroke="black"/>
+<line x1="540" y1="562" x2="540" y2="589" stroke="black"/>
+<polygon fill="white" points="119,569 479,569 479,579 119,579"/>
+<text x="120" y="578" textLength="358" font-family="Helvetica" font-size="12" fill="black">
+OR: Both Set_Client and Server2 are partitioned from Watch_Client
+</text>
+<line x1="30" y1="575" x2="119" y2="575" stroke="black" stroke-dasharray="2,2"/>
+<line x1="481" y1="575" x2="570" y2="575" stroke="black" stroke-dasharray="2,2"/>
+<line x1="60" y1="589" x2="60" y2="649" stroke="black"/>
+<line x1="180" y1="589" x2="180" y2="649" stroke="black"/>
+<line x1="300" y1="589" x2="300" y2="649" stroke="black"/>
+<line x1="420" y1="589" x2="420" y2="649" stroke="black"/>
+<line x1="540" y1="589" x2="540" y2="649" stroke="black"/>
+<path d="M 540 611 A60,6 0 0,1 539,624" stroke="black" fill="none"/><line x1="540" y1="624" x2="550" y2="630" stroke="black"/>
+<polygon fill="white" points="281,591 538,591 538,601 281,601"/>
+<text x="282" y="600" textLength="255" font-family="Helvetica" font-size="12" fill="black">
+Erlang 'DOWN' message for Server2 monitoring
+</text>
+<polygon fill="white" points="288,602 538,602 538,612 288,612"/>
+<text x="289" y="611" textLength="248" font-family="Helvetica" font-size="12" fill="black">
+We know that Server2 is unavailable, therefore
+</text>
+<polygon fill="white" points="276,613 538,613 538,623 276,623"/>
+<text x="277" y="622" textLength="260" font-family="Helvetica" font-size="12" fill="black">
+we may or may not receive a change notification.
+</text>
+<polygon fill="white" points="270,624 538,624 538,634 270,634"/>
+<text x="271" y="633" textLength="266" font-family="Helvetica" font-size="12" fill="black">
+We must re-send 'watch setup request' to Server2
+</text>
+<polygon fill="white" points="288,635 538,635 538,645 288,645"/>
+<text x="289" y="644" textLength="248" font-family="Helvetica" font-size="12" fill="black">
+to reestablish watches on a quorum of servers.
+</text>
+<line x1="60" y1="649" x2="60" y2="676" stroke="black"/>
+<line x1="180" y1="649" x2="180" y2="676" stroke="black"/>
+<line x1="300" y1="649" x2="300" y2="676" stroke="black"/>
+<line x1="420" y1="649" x2="420" y2="676" stroke="black"/>
+<line x1="540" y1="649" x2="540" y2="676" stroke="black"/>
+<polygon fill="white" points="149,656 449,656 449,666 149,666"/>
+<text x="150" y="665" textLength="298" font-family="Helvetica" font-size="12" fill="black">
+Scenario #4: Set operation goes to Server2 and Server3
+</text>
+<line x1="30" y1="662" x2="149" y2="662" stroke="black" stroke-dasharray="2,2"/>
+<line x1="451" y1="662" x2="570" y2="662" stroke="black" stroke-dasharray="2,2"/>
+<line x1="60" y1="676" x2="60" y2="703" stroke="black"/>
+<line x1="180" y1="676" x2="180" y2="703" stroke="black"/>
+<line x1="300" y1="676" x2="300" y2="703" stroke="black"/>
+<line x1="420" y1="676" x2="420" y2="703" stroke="black"/>
+<line x1="540" y1="676" x2="540" y2="703" stroke="black"/>
+<polygon fill="white" points="120,683 479,683 479,693 120,693"/>
+<text x="121" y="692" textLength="357" font-family="Helvetica" font-size="12" fill="black">
+AND: 'change notify sent' async message is dropped or never sent.
+</text>
+<line x1="30" y1="689" x2="120" y2="689" stroke="black" stroke-dasharray="2,2"/>
+<line x1="481" y1="689" x2="570" y2="689" stroke="black" stroke-dasharray="2,2"/>
+<line x1="60" y1="703" x2="60" y2="730" stroke="black"/>
+<line x1="180" y1="703" x2="180" y2="730" stroke="black"/>
+<line x1="300" y1="703" x2="300" y2="730" stroke="black"/>
+<line x1="420" y1="703" x2="420" y2="730" stroke="black"/>
+<line x1="540" y1="703" x2="540" y2="730" stroke="black"/>
+<path d="M 300 709 A60,6 0 0,1 299,722" stroke="black" fill="none"/><line x1="300" y1="722" x2="310" y2="728" stroke="black"/>
+<polygon fill="white" points="17,705 298,705 298,715 17,715"/>
+<text x="18" y="714" textLength="279" font-family="Helvetica" font-size="12" fill="black">
+Timeout watiting for 'change notify sent' confirmation
+</text>
+<line x1="60" y1="730" x2="60" y2="757" stroke="black"/>
+<line x1="180" y1="730" x2="180" y2="757" stroke="black"/>
+<line x1="300" y1="730" x2="300" y2="757" stroke="black"/>
+<line x1="420" y1="730" x2="420" y2="757" stroke="black"/>
+<line x1="540" y1="730" x2="540" y2="757" stroke="black"/>
+<line x1="300" y1="743" x2="540" y2="743" stroke="black"/>
+<line x1="540" y1="743" x2="530" y2="749" stroke="black"/>
+<polygon fill="white" points="361,732 477,732 477,742 361,742"/>
+<text x="362" y="741" textLength="114" font-family="Helvetica" font-size="12" fill="black">
+change notify request
+</text>
+<line x1="60" y1="757" x2="60" y2="784" stroke="black"/>
+<line x1="180" y1="757" x2="180" y2="784" stroke="black"/>
+<line x1="300" y1="757" x2="300" y2="784" stroke="black"/>
+<line x1="420" y1="757" x2="420" y2="784" stroke="black"/>
+<line x1="540" y1="757" x2="540" y2="784" stroke="black"/>
+<line x1="540" y1="770" x2="300" y2="770" stroke="black"/>
+<line x1="300" y1="770" x2="310" y2="776" stroke="black"/>
+<polygon fill="white" points="373,759 465,759 465,769 373,769"/>
+<text x="374" y="768" textLength="90" font-family="Helvetica" font-size="12" fill="black">
+change notify: ok
+</text>
+<line x1="60" y1="784" x2="60" y2="811" stroke="black" stroke-dasharray="2,2"/>
+<line x1="180" y1="784" x2="180" y2="811" stroke="black" stroke-dasharray="2,2"/>
+<line x1="300" y1="784" x2="300" y2="811" stroke="black" stroke-dasharray="2,2"/>
+<line x1="420" y1="784" x2="420" y2="811" stroke="black" stroke-dasharray="2,2"/>
+<line x1="540" y1="784" x2="540" y2="811" stroke="black" stroke-dasharray="2,2"/>
+<polygon fill="white" points="139,791 459,791 459,801 139,801"/>
+<text x="140" y="800" textLength="318" font-family="Helvetica" font-size="12" fill="black">
+Now Watch_Client knows that the key *may* have changed.
+</text>
+<line x1="60" y1="811" x2="60" y2="838" stroke="black"/>
+<line x1="180" y1="811" x2="180" y2="838" stroke="black"/>
+<line x1="300" y1="811" x2="300" y2="838" stroke="black"/>
+<line x1="420" y1="811" x2="420" y2="838" stroke="black"/>
+<line x1="540" y1="811" x2="540" y2="838" stroke="black"/>
+<path d="M 420 817 A60,6 0 0,1 419,830" stroke="black" fill="none"/><line x1="420" y1="830" x2="430" y2="836" stroke="black"/>
+<polygon fill="white" points="137,813 418,813 418,823 137,823"/>
+<text x="138" y="822" textLength="279" font-family="Helvetica" font-size="12" fill="black">
+Timeout watiting for 'change notify sent' confirmation
+</text>
+<line x1="60" y1="838" x2="60" y2="865" stroke="black"/>
+<line x1="180" y1="838" x2="180" y2="865" stroke="black"/>
+<line x1="300" y1="838" x2="300" y2="865" stroke="black"/>
+<line x1="420" y1="838" x2="420" y2="865" stroke="black"/>
+<line x1="540" y1="838" x2="540" y2="865" stroke="black"/>
+<line x1="420" y1="851" x2="540" y2="851" stroke="black"/>
+<line x1="540" y1="851" x2="530" y2="857" stroke="black"/>
+<polygon fill="white" points="421,840 537,840 537,850 421,850"/>
+<text x="422" y="849" textLength="114" font-family="Helvetica" font-size="12" fill="black">
+change notify request
+</text>
+<line x1="60" y1="865" x2="60" y2="892" stroke="black"/>
+<line x1="180" y1="865" x2="180" y2="892" stroke="black"/>
+<line x1="300" y1="865" x2="300" y2="892" stroke="black"/>
+<line x1="420" y1="865" x2="420" y2="892" stroke="black"/>
+<line x1="540" y1="865" x2="540" y2="892" stroke="black"/>
+<line x1="540" y1="878" x2="420" y2="878" stroke="black"/>
+<line x1="420" y1="878" x2="430" y2="884" stroke="black"/>
+<polygon fill="white" points="433,867 525,867 525,877 433,877"/>
+<text x="434" y="876" textLength="90" font-family="Helvetica" font-size="12" fill="black">
+change notify: ok
+</text>
+<line x1="60" y1="892" x2="60" y2="919" stroke="black" stroke-dasharray="2,2"/>
+<line x1="180" y1="892" x2="180" y2="919" stroke="black" stroke-dasharray="2,2"/>
+<line x1="300" y1="892" x2="300" y2="919" stroke="black" stroke-dasharray="2,2"/>
+<line x1="420" y1="892" x2="420" y2="919" stroke="black" stroke-dasharray="2,2"/>
+<line x1="540" y1="892" x2="540" y2="919" stroke="black" stroke-dasharray="2,2"/>
+<polygon fill="white" points="141,899 457,899 457,909 141,909"/>
+<text x="142" y="908" textLength="314" font-family="Helvetica" font-size="12" fill="black">
+Now Watch_Client knows that the key *definitely* changed.
+</text>
+</svg>

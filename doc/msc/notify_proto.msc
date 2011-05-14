@@ -1,0 +1,48 @@
+msc {
+
+    Set_Client, Server1, Server2, Server3, Watch_Client;
+
+    --- [label="All scenarios share a common first phase"];
+
+    Watch_Client->Server2 [label="watch setup request"];
+    Watch_Client<-Server2 [label="watch setup: ok"];
+    //Server2->Watch_Client [label="watch setup: ok"];
+    Watch_Client->Server3 [label="watch setup request"];
+    Server3->Watch_Client [label="watch setup: ok"];
+
+    Set_Client->Server1 [label="set request"];
+    Set_Client->Server2 [label="set request"];
+    Set_Client<-Server2 [label="set request: ok + notify Watch_Client"];
+    Set_Client<-Server1 [label="set request: ok + notify nobody"];
+
+    --- [label="Scenario #1: no process crashes and no network partitions"];
+
+    Set_Client->Watch_Client [label="change notify request"];
+    Set_Client<-Watch_Client [label="change notify: ok"];
+    Set_Client->Server2 [label="change notify sent to Watch_Client"];
+
+    --- [label="Scenario #2: Set_Client crashes"];
+    --- [label="OR: 'change notify sent' async message is dropped"];
+    --- [label="OR: Network partition between Set_Client and Watch_Client"];
+
+    Server2->Server2 [label="Timeout watiting for 'change notify sent' confirmation"];
+    Server2->Watch_Client [label="change notify request"];
+    Server2<-Watch_Client [label="change notify: ok"];
+
+    --- [label="Scenario #3: Both Set_Client and Server2 have crashed"];
+    --- [label="OR: Both Set_Client and Server2 are partitioned from Watch_Client"];
+
+    Watch_Client->Watch_Client [label="Erlang 'DOWN' message for Server2 monitoring\nWe know that Server2 is unavailable, therefore\nwe may or may not receive a change notification.\nWe must re-send 'watch setup request' to Server2\nto reestablish watches on a quorum of servers."];
+
+    --- [label="Scenario #4: Set operation goes to Server2 and Server3"];
+    --- [label="AND: 'change notify sent' async message is dropped or never sent."];
+
+    Server2->Server2 [label="Timeout watiting for 'change notify sent' confirmation"];
+    Server2->Watch_Client [label="change notify request"];
+    Server2<-Watch_Client [label="change notify: ok"];
+    ... [label="Now Watch_Client knows that the key *may* have changed."];
+    Server3->Server3 [label="Timeout watiting for 'change notify sent' confirmation"];
+    Server3->Watch_Client [label="change notify request"];
+    Server3<-Watch_Client [label="change notify: ok"];
+    ... [label="Now Watch_Client knows that the key *definitely* changed."];
+}
