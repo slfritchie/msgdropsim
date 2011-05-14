@@ -349,7 +349,7 @@ client_ph2_waiting(timeout, C = #c{num_responses = NumResps, ph2_val = Z}) ->
 
 cl_send_notifications(#c{watchers = Ws}) ->
     [slf_msgsim:bang(Client, {watch_notify_req, ClOp, slf_msgsim:self()}) ||
-        {Client, ClOp} <- Ws].
+        {Client, ClOp} <- lists:usort(Ws)].
 
 client_notif_resp_waiting({watch_notify_resp, Client, ClOp, ok},
                            C = #c{num_servers = NumServers, watchers = Ws}) ->
