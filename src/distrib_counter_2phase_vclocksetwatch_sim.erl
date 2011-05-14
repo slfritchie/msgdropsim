@@ -441,6 +441,9 @@ client_watch_waiting({watch_notify_req, ClOp, From}, #c{clop = ClOp}) ->
     slf_msgsim:add_utrace({watch, todo}),
     slf_msgsim:bang(From, {watch_notify_resp, slf_msgsim:self(), ClOp, ok}),
     {recv_general, client_init, #c{}};
+%% TODO: Figure out if it's best to wait for more maybe notifications
+%%       (because a quorum of maybes change =?= definite change?)
+%%       or keep things as they are: a maybe is a maybe
 client_watch_waiting({watch_notify_maybe_req, ClOp, From}, #c{clop = ClOp}) ->
     io:format("m"),
     slf_msgsim:add_utrace({watch_maybe, todo}),
