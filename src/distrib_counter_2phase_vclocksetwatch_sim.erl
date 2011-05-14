@@ -433,9 +433,6 @@ client_watch_cancelling({watch_notify_req, ClOp, Server}, C) ->
     %% cancel ack.
     slf_msgsim:bang(Server, {watch_notify_resp, slf_msgsim:self(), ClOp, ok}),
     {recv_timeout, same, C};
-client_watch_cancelling({watch_cancel_resp, _ClOp, _Server, _}, C) ->
-    %% late arrival
-    {recv_timeout, same, C};
 client_watch_cancelling(timeout, C) ->
     slf_msgsim:add_utrace({watch_cancelling_timeout, slf_msgsim:self()}),
     cl_watch_send_cancels(C).
