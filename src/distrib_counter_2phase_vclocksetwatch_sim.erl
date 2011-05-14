@@ -361,9 +361,13 @@ client_notif_resp_waiting({watch_notify_resp, Client, ClOp, ok},
         NewWs ->
             {recv_timeout, same, C#c{watchers = NewWs}}
     end;
-client_notif_resp_waiting(timeout, C) ->
-    cl_send_notifications(C),
-    {recv_timeout, same, C};
+client_notif_resp_waiting(timeout, C = #c{watchers = Ws}) ->
+    if Ws == [] ->
+            {recv_general, client_init, #c{}};
+       true ->
+            cl_send_notifications(C),
+            {recv_timeout, same, C}
+    end;
 client_notif_resp_waiting({watch_notify_req, ClOp, From}, C) ->
     %% Race: this arrived late, need to respond to it, though.
     slf_msgsim:bang(From, {watch_notify_resp, slf_msgsim:self(), ClOp, ok}),
@@ -372,6 +376,10 @@ client_notif_resp_waiting({watch_notify_maybe_req, ClOp, From}, C) ->
     %% Race: this arrived late, need to respond to it, though.
     slf_msgsim:bang(From, {watch_notify_maybe_resp,
                            slf_msgsim:self(), ClOp, ok}),
+    {recv_timeout, same, C};
+client_notif_resp_waiting({ph1_ask_sorry, _, _, _}, C) ->
+    %% Race: this arrived late.  But we need to consume it, otherwise we
+    %%       won't get a timeout message when we need one
     {recv_timeout, same, C}.
 
 %%% Client watch-related states
