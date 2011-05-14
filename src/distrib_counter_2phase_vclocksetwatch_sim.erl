@@ -398,9 +398,6 @@ client_watch_setup({watch_setup_resp, ClOp, _Server, ok} = Msg,
        true ->
             {recv_timeout, same, NewC}
     end;
-client_watch_setup({watch_setup_resp, _ClOp, _Server, _}, C) ->
-    %% late message
-    {recv_timeout, same, C};
 client_watch_setup(timeout, C) ->
     slf_msgsim:add_utrace({watch_setup_timeout, slf_msgsim:self()}),
     cl_watch_send_cancels(C).
