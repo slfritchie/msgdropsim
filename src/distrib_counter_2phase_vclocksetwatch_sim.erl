@@ -115,7 +115,6 @@ verify_property(NumClients, NumServers, _Props, F1, F2, Ops,
                         Count /= timeout],
     Emitted1 = lists:keysort(2, Emitted0),
     Emitted = [Count || {counter, _Now, Count} <- Emitted1],
-    Phase1Timeouts = [x || {_Clnt,_Step,{timeout_phase1, _}} <- UTrc],
     Phase1QuorumFails = [x || {_Clnt,_Step,{ph1_quorum_failure,_,_,_}} <- UTrc],
     Phase2Timeouts = [x || {_Clnt,_Step,{timeout_phase2, _, _}} <- UTrc],
     Steps = slf_msgsim:get_step(Sched1),
@@ -134,13 +133,13 @@ verify_property(NumClients, NumServers, _Props, F1, F2, Ops,
        io:format("Failed:\nF1 = ~p\nF2 = ~p\nEnd2 = ~P\n"
                  "Runnable = ~p, Receivable = ~p\n"
                  "Emitted counters = ~w\n"
-                 "CounterOps ~p ?= Emitted ~p + Phase1QuorumFails ~p + Phase1Timeouts ~p + Phase2Timeouts ~p\n"
+                 "CounterOps ~p ?= Emitted ~p + Phase1QuorumFails ~p + Phase2Timeouts ~p\n"
                  "# Unconsumed ~p, NumCrashes ~p\n",
                  [F1, F2, Sched1, 250,
                   slf_msgsim:runnable_procs(Sched1),
                   slf_msgsim:receivable_procs(Sched1),
                   Emitted,
-                 length(CounterOps), length(Emitted), length(Phase1QuorumFails), length(Phase1Timeouts), length(Phase2Timeouts),
+                 length(CounterOps), length(Emitted), length(Phase1QuorumFails), length(Phase2Timeouts),
                  length(Unconsumed), NumCrashes]),
        classify(NumDrops /= 0, at_least_1_msg_dropped,
        measure("clients     ", NumClients,
@@ -149,7 +148,6 @@ verify_property(NumClients, NumServers, _Props, F1, F2, Ops,
        measure("crashes     ", NumCrashes,
        measure("# ops       ", length(Ops),
        measure("# emitted   ", length(Emitted),
-       measure("# ph1 t.out ", length(Phase1Timeouts),
        measure("# ph1 q.fail", length(Phase1QuorumFails),
        measure("# ph2 t.out ", length(Phase2Timeouts),
        measure("msgs sent   ", NumMsgs,
@@ -170,13 +168,12 @@ verify_property(NumClients, NumServers, _Props, F1, F2, Ops,
            Runnable == false andalso
            length(CounterOps) == length(Emitted) +
                length(Phase1QuorumFails) +
-               length(Phase1Timeouts) +
                length(Phase2Timeouts) andalso
                length(Emitted) == length(lists:usort(Emitted)) andalso
                Emitted == lists:sort(Emitted) andalso
                Unconsumed == [] andalso
                NumCrashes == 0
-       end)))))))))))))))))))))))).
+       end))))))))))))))))))))))).
 
 %%% Protocol implementation
 
