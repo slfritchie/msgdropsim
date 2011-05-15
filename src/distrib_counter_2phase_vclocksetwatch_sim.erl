@@ -517,7 +517,9 @@ server_asked(timeout, S) ->
 server_asked({watch_setup_req, _From, _ClOp} = Msg, S) ->
     {recv_timeout, same, sv_watch_setup(Msg, S)};
 server_asked({watch_cancel_req, _From, _ClOp} = Msg, S) ->
-    {recv_timeout, same, sv_watch_cancel(Msg, S)}.
+    {recv_timeout, same, sv_watch_cancel(Msg, S)};
+server_asked({watch_notify_maybe_resp, _From, _ClOp, ok}, S) ->
+    {recv_timeout, same, S}.
 
 server_change_notif_fromsetter({watch_notifies_delivered, Watchers},
                                 S = #s{watchers = Ws}) ->
