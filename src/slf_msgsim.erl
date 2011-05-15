@@ -273,6 +273,8 @@ consume_scheduler_token(P = #proc{mbox = Mbox, outbox = Outbox},
             end;
         outbox when OutboxNotEmpty ->
             case queue:out(P#proc.outbox) of
+                {{value, {IMsg, X}}, Q2} when X < 0 ->
+                    exit({bad_outbox, P#proc.name, IMsg, count, X});
                 {{value, {IMsg, 0}}, Q2} ->
                     deliver_rotate_and_incr_step(IMsg, Q2, P#proc.name, S);
                 {{value, {IMsg, DelaySteps}}, Q2} ->
@@ -326,14 +328,17 @@ add_outgoing_msg(Sender, Rcpt, Msg, {t_delay, DelaySteps0}, P) ->
     %%       the message for longer.  The if stmt below will guarantee
     %%       that each new message is delayed for at least 1 round longer
     %%       than any other message.
-    DelaySteps = if L == [] ->
-                         0;
-                    true ->
-                         MaxDelay = lists:max([Rnds || {_Imsg, Rnds} <- L]),
-                         if DelaySteps0 > MaxDelay -> DelaySteps0;
-                            true                   -> MaxDelay + 1
-                         end
-                 end,
+    DelaySteps = 
+        if L == [] ->
+                0;
+           true ->
+                MaxDelay = zero_max([Rnds || {{imsg, _Sd, _Rt, _}, Rnds} <- L,
+                                             _Sd == Sender, _Rt == Rcpt
+                                     ]),
+                if DelaySteps0 >= MaxDelay -> DelaySteps0;
+                   true                    -> MaxDelay + 1
+                end
+        end,
     P#proc{outbox = queue:in({{imsg, Sender, Rcpt, Msg}, DelaySteps}, Q)}.
 
 deliver_msg({imsg, Sender, Rcpt, Msg} = IMsg, S) ->
@@ -453,6 +458,11 @@ member_of_an_interval_p(Step, [_|Rest]) ->
     member_of_an_interval_p(Step, Rest);
 member_of_an_interval_p(_, _) ->
     false.
+
+zero_max([]) ->
+    0;
+zero_max(L) ->
+    lists:max(L).
 
 %%% Test funcs
 
