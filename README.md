@@ -36,7 +36,6 @@ above list.
 3. Yes.  We use the QuickCheck tool to simulate a token-based
    scheduler, where QuickCheck generates random lists of tokens.  The
    scheduler is as fair or as unfair as you wish.
-
    There is nothing in the implementation (that I know of) that would
    prevent the use of PropEr for generating any of the test cases
    within the simulator.  I simply haven't had time to try using
