@@ -111,12 +111,13 @@ verify_property(NumClients, NumServers, _Props, F1, F2, Ops,
     NumCrashes = length([x || {process_crash,_,_,_,_,_} <- Trc]),
     %% We need to sort the emitted events by "time", see comment
     %% below with "erlang:now()" in it.
-    Emitted0 = [Inner || {_Clnt, _Step, Inner = {counter, _Now, Count}} <- UTrc,
-                        Count /= timeout],
+    Emitted0 = [Inner ||
+                   {_Clnt, _Step, Inner = {counter, _Now, Count, _Ws}} <- UTrc,
+                   Count /= timeout],
     Emitted1 = lists:keysort(2, Emitted0),
-    Emitted2 = [{counter, Now, hd(Z#obj.contents)} ||
-                   {counter, Now, Z} <- Emitted1],
-    Emitted = [Count || {counter, _Now, Count} <- Emitted2],
+    Emitted2 = [{counter, Now, hd(Z#obj.contents), Ws} ||
+                   {counter, Now, Z, Ws} <- Emitted1],
+    Emitted = [Count || {counter, _Now, Count, _Ws} <- Emitted2],
     Phase1QuorumFails = [x || {_Clnt,_Step,{ph1_quorum_failure,_,_,_}} <- UTrc],
     Phase2Timeouts = [x || {_Clnt,_Step,{timeout_phase2, _, _}} <- UTrc],
     Steps = slf_msgsim:get_step(Sched1),
@@ -134,7 +135,7 @@ verify_property(NumClients, NumServers, _Props, F1, F2, Ops,
 
     %% Start the LTL-wanna-be by gathering up some useful stuff.
     CounterStartZs = [{Step,Z} || {_,Step,{counter_start_ph2,_,Z}} <- UTrc],
-    CounterDefiniteZs =  [{Step,Z} || {_,Step,{counter, _, Z}} <- UTrc],
+    CounterDefiniteZs =  [{Step,Z,Ws} || {_,Step,{counter, _, Z, Ws}} <- UTrc],
     WatchSetupStartClOps =
         [{Step,ClOp} || {_,Step,{watch_setup_start,ClOp,_}} <- UTrc],
     WatchSetupDoneClOps =
@@ -169,9 +170,9 @@ verify_property(NumClients, NumServers, _Props, F1, F2, Ops,
                     EarlierStep > LaterStep],         % negate the desired cond!
 
     %% More interesting: If a {watch_notify,_,Z} is present,
-    %%                   then a {counter,_,Z} must be present earlier.
-    C3 = [{X, Y} || {LaterStep,_,Z_l} = X <- WatchNotifyClOps,
-                    {EarlierStep,Z_e} = Y <- CounterDefiniteZs,
+    %%                   then a {counter,_,Z,_} must be present earlier.
+    C3 = [{X, Y} || {LaterStep,_,Z_l}   = X <- WatchNotifyClOps,
+                    {EarlierStep,Z_e,_} = Y <- CounterDefiniteZs,
                     Z_e == Z_l,
                     EarlierStep > LaterStep],         % negate the desired cond!
 
@@ -187,9 +188,52 @@ verify_property(NumClients, NumServers, _Props, F1, F2, Ops,
     %% watch was definitely setup ({watch_setup_done,...}) and the timeout.
     C5 = [{X,Y,Z} || {SetupDoneStep,ClOp_d} = Y <- WatchSetupDoneClOps,
                      {TimeoutStep,  ClOp_t} = X <- WatchTimeoutClOps,
-                     {Ph2Step,_,_Z}         = Z <- CounterStartZs,
                      ClOp_d == ClOp_t,
-                     SetupStep =< Ph2Step andalso Ph2Step =< TimeoutStep],
+                     {Ph2Step,_,_Z}         = Z <- CounterStartZs,
+                     SetupDoneStep =< Ph2Step andalso Ph2Step =< TimeoutStep],
+
+    %% More interesting: If a {watch_timeout,ClOp} is present, then ClOp must
+    %% not be present in any Watchers in {counter,_,_Z,Watchers} list.
+
+    %% Its intent: we want the watch mechanism to always deliver a
+    %% notification to a watcher, definite or maybe, whenever a key has
+    %% changed.
+    %%
+    %% Ha, this one proves more interesting.  Here's a counterexample:
+    %%   * three servers, one client
+    %%   * ops: watch, increment
+    %%   * network partition: one message dropped (see below).
+    %%   Sequence of events:
+    %%     1. Set up the watch
+    %%     2. A network partition drops the {watch_setup_resp,...} message
+    %%        from server S1.  Servers S2 and S3 ack the watch setup without
+    %%        a problem.
+    %%     3. The watch times out, because there isn't any other client to
+    %%        perform an increment.
+    %%     4. The client sends {watch_cancel_req,...} messages to S2 and S3.
+    %%        No cancel is sent to S1 because of the network partition in
+    %%        step #2.
+    %%     5. Now the client performs an increment.
+    %%     6. Server S1's sends {ph2_ok, _ClOp, Watchers}, where Watchers
+    %%        contains the watch setup request from step #1.
+    %%     7. The C6 list below finds the "bad combination".
+    %%
+    %% In reality, the sequence events above isn't an error: C6's calculation
+    %% is faulty.  We need to add an additional check, i.e., that the timeout
+    %% happens *after* the watch setup.
+    %%
+    %% Also, there is an honest race between the watch setup and the end
+    %% of the increment phase 2.  To disambiguate, we must only test watch
+    %% timeouts that were *definitely* setup before the end of incr phase 2.
+    %%
+    C6 = [{X,Y,Z} || {Step_d,ClOp_d}      = X <- WatchSetupDoneClOps,
+                     {Step_c,_Z,Watchers} = Y <- CounterDefiniteZs,
+                     {Step_t,ClOp_t}      = Z <- WatchTimeoutClOps,
+                     Step_d < Step_c,               %% extra check, see comments
+                     ClOp_t == ClOp_d,              %% honest race fixer part 1
+                     Step_t > Step_c,               %% honest race fixer part 2
+                     {_Client, ClOp_w} <- Watchers,
+                     ClOp_t == ClOp_w],
 
     ?WHENFAIL(
        io:format("Failed:\nF1 = ~p\nF2 = ~p\nEnd2 = ~P\n"
@@ -197,14 +241,16 @@ verify_property(NumClients, NumServers, _Props, F1, F2, Ops,
                  "Emitted counters = ~w\n"
                  "CounterOps ~p ?= Emitted ~p + Phase1QuorumFails ~p + Phase2Timeouts ~p\n"
                  "# Unconsumed ~p, NumCrashes ~p\n"
-                 "C1 = ~p, C2 = ~p, C3 = ~p, C4 = ~p, C5 = ~p\n",
+                 "C1 = ~p, C2 = ~p, C3 = ~p, C4 = ~p, C5 = ~p\n"
+                 "C6 = ~p\n",
                  [F1, F2, Sched1, 250,
                   slf_msgsim:runnable_procs(Sched1),
                   slf_msgsim:receivable_procs(Sched1),
                   Emitted,
                   length(CounterOps), length(Emitted), length(Phase1QuorumFails), length(Phase2Timeouts),
                   length(Unconsumed), NumCrashes,
-                  C1, C2, C3, C4, C5]),
+                  C1, C2, C3, C4, C5,
+                  C6]),
        classify(NumDrops /= 0, at_least_1_msg_dropped,
        measure("clients     ", NumClients,
        measure("servers     ", NumServers,
@@ -239,7 +285,7 @@ verify_property(NumClients, NumServers, _Props, F1, F2, Ops,
                NumCrashes == 0 andalso
                %% LTL-like time
                C1 == [] andalso C2 == [] andalso C3 == [] andalso
-               C4 == [] andalso C5 == []
+               C4 == [] andalso C5 == [] andalso C6 == []
        end))))))))))))))))))))))).
 
 %%% Protocol implementation
@@ -381,12 +427,12 @@ client_ph2_waiting({ph2_ok, ClOp, Watchers},
                    C = #c{clop = ClOp,
                           num_responses = NumResps, ph2_val = Z,
                           watchers = Ws}) ->
-    NewWatchers = Watchers ++ Ws,
+    NewWatchers = lists:usort(Watchers ++ Ws),
     if length(C#c.ph1_oks) /= NumResps + 1 ->
             {recv_timeout, same, C#c{num_responses = NumResps + 1,
                                      watchers = NewWatchers}};
        true ->
-            slf_msgsim:add_utrace({counter, C#c.ph2_now, Z}),
+            slf_msgsim:add_utrace({counter, C#c.ph2_now, Z, NewWatchers}),
             if NewWatchers == [] ->
                     {recv_general, client_init, #c{}};
                true ->
@@ -400,10 +446,11 @@ client_ph2_waiting({ph1_ask_ok, ClOp, Server, Cookie, _Z} = Msg,
                    C = #c{clop = ClOp, ph1_oks = Oks, ph2_val = Z}) ->
     slf_msgsim:bang(Server, {ph2_do_set, slf_msgsim:self(), ClOp, Cookie, Z}),
     {recv_timeout, same, C#c{ph1_oks = [Msg|Oks]}};
-client_ph2_waiting(timeout, C = #c{num_responses = NumResps, ph2_val = Z}) ->
+client_ph2_waiting(timeout, C = #c{num_responses = NumResps, ph2_val = Z,
+                                   watchers = Ws}) ->
     Q = calc_q(C),
     if NumResps >= Q ->
-            slf_msgsim:add_utrace({counter, C#c.ph2_now, Z}),
+            slf_msgsim:add_utrace({counter, C#c.ph2_now, Z, lists:usort(Ws)}),
             cl_send_notifications(C),
             {recv_timeout, client_notif_resp_waiting, C};
        true ->
