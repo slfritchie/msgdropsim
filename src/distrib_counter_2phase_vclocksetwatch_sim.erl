@@ -143,6 +143,8 @@ verify_property(NumClients, NumServers, _Props, F1, F2, Ops,
         [{Step,ClOp,Z} || {_,Step,{watch_notify,ClOp,Z}} <- UTrc],
     WatchNotifyMaybeClOps =
         [{Step,ClOp,Z} || {_,Step,{watch_notify_maybe,ClOp,Z}} <- UTrc],
+    WatchTimeoutClOps =
+        [{Step,ClOp} || {_,Step,{watch_timeout,ClOp}} <- UTrc],
 
     %% Baby step: If a {watch_notify,ClOp,_} is present,
     %%            then a {watch_setup_done,ClOp,_} must be present earlier.
@@ -180,20 +182,29 @@ verify_property(NumClients, NumServers, _Props, F1, F2, Ops,
                     Z_e == Z_l,
                     EarlierStep > LaterStep],         % negate the desired cond!
 
+    %% More interesting: If a {watch_timeout,ClOp} is present, then there
+    %% must not be any {counter_start_ph2,_,Z} events between the time that the
+    %% watch was definitely setup ({watch_setup_done,...}) and the timeout.
+    C5 = [{X,Y,Z} || {SetupDoneStep,ClOp_d} = Y <- WatchSetupDoneClOps,
+                     {TimeoutStep,  ClOp_t} = X <- WatchTimeoutClOps,
+                     {Ph2Step,_,_Z}         = Z <- CounterStartZs,
+                     ClOp_d == ClOp_t,
+                     SetupStep =< Ph2Step andalso Ph2Step =< TimeoutStep],
+
     ?WHENFAIL(
        io:format("Failed:\nF1 = ~p\nF2 = ~p\nEnd2 = ~P\n"
                  "Runnable = ~p, Receivable = ~p\n"
                  "Emitted counters = ~w\n"
                  "CounterOps ~p ?= Emitted ~p + Phase1QuorumFails ~p + Phase2Timeouts ~p\n"
                  "# Unconsumed ~p, NumCrashes ~p\n"
-                 "C1 = ~p, C2 = ~p, C3 = ~p, C4 = ~p\n",
+                 "C1 = ~p, C2 = ~p, C3 = ~p, C4 = ~p, C5 = ~p\n",
                  [F1, F2, Sched1, 250,
                   slf_msgsim:runnable_procs(Sched1),
                   slf_msgsim:receivable_procs(Sched1),
                   Emitted,
                   length(CounterOps), length(Emitted), length(Phase1QuorumFails), length(Phase2Timeouts),
                   length(Unconsumed), NumCrashes,
-                  C1, C2, C3, C4]),
+                  C1, C2, C3, C4, C5]),
        classify(NumDrops /= 0, at_least_1_msg_dropped,
        measure("clients     ", NumClients,
        measure("servers     ", NumServers,
@@ -227,7 +238,8 @@ verify_property(NumClients, NumServers, _Props, F1, F2, Ops,
                Unconsumed == [] andalso
                NumCrashes == 0 andalso
                %% LTL-like time
-               C1 == [] andalso C2 == [] andalso C3 == [] andalso C4 == []
+               C1 == [] andalso C2 == [] andalso C3 == [] andalso
+               C4 == [] andalso C5 == []
        end))))))))))))))))))))))).
 
 %%% Protocol implementation
@@ -508,8 +520,8 @@ client_watch_waiting({watch_setup_resp, ClOp, _Server, ok} = Msg,
     NumResps = NumResps0 + 1,
     Oks = [Msg|Oks0],
     {recv_timeout, same, C#c{num_responses = NumResps, ph1_oks = Oks}};
-client_watch_waiting(timeout, C) ->
-    slf_msgsim:add_utrace({watch_timeout, todo}),
+client_watch_waiting(timeout, C = #c{clop = ClOp}) ->
+    slf_msgsim:add_utrace({watch_timeout, ClOp}),
     cl_watch_send_cancels(C).
 
 %%% Server counter-related states
