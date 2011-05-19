@@ -114,7 +114,9 @@ verify_property(NumClients, NumServers, _Props, F1, F2, Ops,
     Emitted0 = [Inner || {_Clnt, _Step, Inner = {counter, _Now, Count}} <- UTrc,
                         Count /= timeout],
     Emitted1 = lists:keysort(2, Emitted0),
-    Emitted = [Count || {counter, _Now, Count} <- Emitted1],
+    Emitted2 = [{counter, Now, hd(Z#obj.contents)} ||
+                   {counter, Now, Z} <- Emitted1],
+    Emitted = [Count || {counter, _Now, Count} <- Emitted2],
     Phase1QuorumFails = [x || {_Clnt,_Step,{ph1_quorum_failure,_,_,_}} <- UTrc],
     Phase2Timeouts = [x || {_Clnt,_Step,{timeout_phase2, _, _}} <- UTrc],
     Steps = slf_msgsim:get_step(Sched1),
@@ -127,8 +129,15 @@ verify_property(NumClients, NumServers, _Props, F1, F2, Ops,
     UncondNew   = length([x || {_,_,{unconditional_set, new}} <- UTrc]),
     UncondOther = length([x || {_,_,{unconditional_set, other}} <- UTrc]),
     WatchTimeouts = length([x || {_,_,{watch_timeout, _}} <- UTrc]),
-    WatchOks = length([x || {_,_,{watch, _}} <- UTrc]),
-    WatchMaybes = length([x || {_,_,{watch_maybe, _}} <- UTrc]),
+    WatchOks = length([x || {_,_,{watch_notify, _, _}} <- UTrc]),
+    WatchMaybes = length([x || {_,_,{watch_notify_maybe, _, _}} <- UTrc]),
+
+    _CounterStartL    = [X || {_,_,{counter_start_ph2, _, _}} = X <- UTrc],
+    _CounterDefiniteL = [X || {_,_,{counter, _, _}} = X <- UTrc],
+    _WatchStartL      = [X || {_,_,{watch_setup_start, _, _}} = X <- UTrc],
+    _WatchStartDoneL  = [X || {_,_,{watch_setup_done, _, _}} = X <- UTrc],
+    _WatchDefiniteL   = [X || {_,_,{watch_notify, _, _}} = X <- UTrc],
+    _WatchMaybeL      = [X || {_,_,{watch_notify_maybe, _, _}} = X <- UTrc],
     ?WHENFAIL(
        io:format("Failed:\nF1 = ~p\nF2 = ~p\nEnd2 = ~P\n"
                  "Runnable = ~p, Receivable = ~p\n"
@@ -235,18 +244,19 @@ client_init({counter_op, Servers}, _C) ->
                                           num_servers = length(Servers)}};
 client_init({watch_op, Servers}, _C) ->
     ClOp = make_ref(),
+    slf_msgsim:add_utrace({watch_setup_start, ClOp, slf_msgsim:self()}),
     [slf_msgsim:bang(Server, {watch_setup_req, slf_msgsim:self(), ClOp}) ||
         Server <- Servers],
     {recv_timeout, client_watch_setup, #c{clop = ClOp,
                                           num_servers = length(Servers)}};
-client_init({watch_notify_req, ClOp, From}, C) ->
+client_init({watch_notify_req, ClOp, From, Z}, C) ->
     %% Race: this arrived late, need to respond to it, though.
-    slf_msgsim:add_utrace({late, watch_notify_req}),
+    slf_msgsim:add_utrace({late_watch_notify_req, Z}),
     slf_msgsim:bang(From, {watch_notify_resp, slf_msgsim:self(), ClOp, ok}),
     {recv_general, same, C};
-client_init({watch_notify_maybe_req, ClOp, From}, C) ->
+client_init({watch_notify_maybe_req, ClOp, From, Z}, C) ->
     %% Race: this arrived late, need to respond to it, though.
-    slf_msgsim:add_utrace({late, watch_notify_maybe_req}),
+    slf_msgsim:add_utrace({late_watch_notify_maybe_req, Z}),
     slf_msgsim:bang(From, {watch_notify_maybe_resp,
                            slf_msgsim:self(), ClOp, ok}),
     {recv_general, same, C};
@@ -318,8 +328,7 @@ client_ph2_waiting({ph2_ok, ClOp, Watchers},
             {recv_timeout, same, C#c{num_responses = NumResps + 1,
                                      watchers = NewWatchers}};
        true ->
-            [Val] = Z#obj.contents,
-            slf_msgsim:add_utrace({counter, C#c.ph2_now, Val}),
+            slf_msgsim:add_utrace({counter, C#c.ph2_now, Z}),
             if NewWatchers == [] ->
                     {recv_general, client_init, #c{}};
                true ->
@@ -336,8 +345,7 @@ client_ph2_waiting({ph1_ask_ok, ClOp, Server, Cookie, _Z} = Msg,
 client_ph2_waiting(timeout, C = #c{num_responses = NumResps, ph2_val = Z}) ->
     Q = calc_q(C),
     if NumResps >= Q ->
-            [Val] = Z#obj.contents,
-            slf_msgsim:add_utrace({counter, C#c.ph2_now, Val}),
+            slf_msgsim:add_utrace({counter, C#c.ph2_now, Z}),
             cl_send_notifications(C),
             {recv_timeout, client_notif_resp_waiting, C};
        true ->
@@ -345,8 +353,8 @@ client_ph2_waiting(timeout, C = #c{num_responses = NumResps, ph2_val = Z}) ->
             {recv_general, client_init, #c{}}
     end.
 
-cl_send_notifications(#c{watchers = Ws}) ->
-    [slf_msgsim:bang(Client, {watch_notify_req, ClOp, slf_msgsim:self()}) ||
+cl_send_notifications(#c{watchers = Ws, ph2_val = Z}) ->
+    [slf_msgsim:bang(Client, {watch_notify_req, ClOp, slf_msgsim:self(), Z}) ||
         {Client, ClOp} <- lists:usort(Ws)].
 
 client_notif_resp_waiting({watch_notify_resp, Client, ClOp, ok},
@@ -366,11 +374,11 @@ client_notif_resp_waiting(timeout, C = #c{watchers = Ws}) ->
             cl_send_notifications(C),
             {recv_timeout, same, C}
     end;
-client_notif_resp_waiting({watch_notify_req, ClOp, From}, C) ->
+client_notif_resp_waiting({watch_notify_req, ClOp, From, _Counter}, C) ->
     %% Race: this arrived late, need to respond to it, though.
     slf_msgsim:bang(From, {watch_notify_resp, slf_msgsim:self(), ClOp, ok}),
     {recv_timeout, same, C};
-client_notif_resp_waiting({watch_notify_maybe_req, ClOp, From}, C) ->
+client_notif_resp_waiting({watch_notify_maybe_req, ClOp, From, _Z}, C) ->
     %% Race: this arrived late, need to respond to it, though.
     slf_msgsim:bang(From, {watch_notify_maybe_resp,
                            slf_msgsim:self(), ClOp, ok}),
@@ -391,6 +399,7 @@ client_watch_setup({watch_setup_resp, ClOp, _Server, ok} = Msg,
     Q = calc_q(C),
     NumResps = length(Oks),             % sanity check
     if NumResps >= Q ->
+            slf_msgsim:add_utrace({watch_setup_done, ClOp, slf_msgsim:self()}),
             {recv_timeout, client_watch_waiting, NewC};
        true ->
             {recv_timeout, same, NewC}
@@ -417,14 +426,14 @@ client_watch_cancelling({watch_cancel_resp, ClOp, Server, ok},
        true ->
             {recv_timeout, same, C#c{ph1_oks = NewOks}}
     end;
-client_watch_cancelling({watch_notify_maybe_req, ClOp, Server}, C) ->
+client_watch_cancelling({watch_notify_maybe_req, ClOp, Server, _Z}, C) ->
     %% Honest race: this may be the thing that we're trying to cancel.
     %% No matter, we need to ack it then go back to waiting for our
     %% cancel ack.
     slf_msgsim:bang(Server, {watch_notify_maybe_resp,
                              slf_msgsim:self(), ClOp, ok}),
     {recv_timeout, same, C};
-client_watch_cancelling({watch_notify_req, ClOp, Server}, C) ->
+client_watch_cancelling({watch_notify_req, ClOp, Server, _Counter}, C) ->
     %% Again, honest race: this may be the thing that we're trying to cancel.
     %% No matter, we need to ack it then go back to waiting for our
     %% cancel ack.
@@ -434,16 +443,17 @@ client_watch_cancelling(timeout, C) ->
     slf_msgsim:add_utrace({watch_cancelling_timeout, slf_msgsim:self()}),
     cl_watch_send_cancels(C).
 
-client_watch_waiting({watch_notify_req, ClOp, From}, #c{clop = ClOp}) ->
-    slf_msgsim:add_utrace({watch, todo}),
+client_watch_waiting({watch_notify_req, ClOp, From, Z}, #c{clop = ClOp}) ->
+    slf_msgsim:add_utrace({watch_notify, ClOp, Z}),
     slf_msgsim:bang(From, {watch_notify_resp, slf_msgsim:self(), ClOp, ok}),
     {recv_general, client_init, #c{}};
 %% TODO: Figure out if it's best to wait for more maybe notifications
 %%       (because a quorum of maybes change =?= definite change?)
 %%       or keep things as they are: a maybe is a maybe
-client_watch_waiting({watch_notify_maybe_req, ClOp, From}, #c{clop = ClOp}) ->
+client_watch_waiting({watch_notify_maybe_req, ClOp, From, Z},
+                     #c{clop = ClOp}) ->
     io:format("m"),
-    slf_msgsim:add_utrace({watch_maybe, todo}),
+    slf_msgsim:add_utrace({watch_maybe, ClOp, Z}),
     slf_msgsim:bang(From, {watch_notify_maybe_resp, slf_msgsim:self(), ClOp, ok}),
     {recv_general, client_init, #c{}};
 client_watch_waiting({watch_setup_resp, ClOp, _Server, ok} = Msg,
@@ -577,8 +587,9 @@ sv_watch_cancel({watch_cancel_req, From, ClOp}, S = #s{watchers = Ws}) ->
     slf_msgsim:bang(From, {watch_cancel_resp, ClOp, slf_msgsim:self(), ok}),
     S#s{watchers = Ws -- [{From, ClOp}]}.
 
-sv_send_maybe_notifications(S = #s{watchers = Ws, val = _Z}) ->
-     [slf_msgsim:bang(Clnt, {watch_notify_maybe_req, ClOp, slf_msgsim:self()})||
+sv_send_maybe_notifications(S = #s{watchers = Ws, val = Z}) ->
+     [slf_msgsim:bang(Clnt, {watch_notify_maybe_req, ClOp,
+                             slf_msgsim:self(), Z})||
          {Clnt, ClOp} <- Ws],
     S.
 
@@ -633,6 +644,7 @@ cl_p1_send_do(C = #c{num_servers = NumServers, clop = ClOp, ph1_oks = Oks}) ->
     %% verify_property() function can sort the Emitted list by now()
     %% timestamps and then check for correct counter ordering.
     Now = erlang:now(),
+    slf_msgsim:add_utrace({counter_start_ph2, Now, NewZ}),
     [slf_msgsim:bang(Svr, {ph2_do_set, slf_msgsim:self(), ClOp, Cookie, NewZ})
      || {ph1_ask_ok, _x_ClOp, Svr, Cookie, _Z} <- Oks],
     AllServers = lists:sublist(all_servers(), 1, NumServers),
