@@ -90,10 +90,10 @@ For the distributed counter simulations, it can be instructive to use
 "diff" to compare each implementation, in sequence, to see what
 changed.
 
-* diff -u distrib_counter_bad1_sim.erl distrib_counter_bad2_sim.erl
-* diff -u distrib_counter_bad2_sim.erl distrib_counter_bad3_sim.erl
-* diff -u distrib_counter_bad3_sim.erl distrib_counter_bad4_sim.erl
-* diff -u distrib_counter_bad4_sim.erl distrib_counter_bad5_sim.erl
+* `diff -u distrib_counter_bad1_sim.erl distrib_counter_bad2_sim.erl`
+* `diff -u distrib_counter_bad2_sim.erl distrib_counter_bad3_sim.erl`
+* `diff -u distrib_counter_bad3_sim.erl distrib_counter_bad4_sim.erl`
+* `diff -u distrib_counter_bad4_sim.erl distrib_counter_bad5_sim.erl`
 
 How the simulator works
 -----------------------
@@ -124,7 +124,7 @@ arrest me.)
      QuickCheck to try to find a smaller-but-still-failing
      counterexample.
 * Compile
-* Run via `eqc:quickcheck(slf_msgsim_qc:prop_simulate(YourSimModuleName, PropertyList)`
+* Run via `eqc:quickcheck(slf_msgsim_qc:prop_simulate(YourSimModuleName, PropertyList)).`
 
   * If your test passes 100 test cases, then you probably need to run
     for thousands or even millions of test cases.  Use
@@ -134,6 +134,15 @@ arrest me.)
 Future work
 -----------
 
+* Finish converting simulator modules to use QuickCheck
+  [QuickCheck "Mini"](http://www.quviq.com/news100621.html).  All of the
+  older simulator modules were developed using
+  [Quviq's](http://www.quviq.com) commercial version of QuickCheck and
+  use at least one construct that is not present in the "Mini" version.
+** The big one that I know of is the
+  `conjunction([{Label1,Boolean1},{Label2,Boolean2}...])`
+   feature.  For use with QuickCheck Mini, that statement can simply be
+   replaced with some plain Erlang: `Boolean1 andalso Boolean2 andalso ...`.
 * Add support for simulated Erlang monitors, Erlang's method for
   informing processes that messages may have been dropped.
 * Investigate integration of message dropping (and perhaps also
