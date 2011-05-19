@@ -132,24 +132,68 @@ verify_property(NumClients, NumServers, _Props, F1, F2, Ops,
     WatchOks = length([x || {_,_,{watch_notify, _, _}} <- UTrc]),
     WatchMaybes = length([x || {_,_,{watch_notify_maybe, _, _}} <- UTrc]),
 
-    _CounterStartL    = [X || {_,_,{counter_start_ph2, _, _}} = X <- UTrc],
-    _CounterDefiniteL = [X || {_,_,{counter, _, _}} = X <- UTrc],
-    _WatchStartL      = [X || {_,_,{watch_setup_start, _, _}} = X <- UTrc],
-    _WatchStartDoneL  = [X || {_,_,{watch_setup_done, _, _}} = X <- UTrc],
-    _WatchDefiniteL   = [X || {_,_,{watch_notify, _, _}} = X <- UTrc],
-    _WatchMaybeL      = [X || {_,_,{watch_notify_maybe, _, _}} = X <- UTrc],
+    %% Start the LTL-wanna-be by gathering up some useful stuff.
+    CounterStartZs = [{Step,Z} || {_,Step,{counter_start_ph2,_,Z}} <- UTrc],
+    CounterDefiniteZs =  [{Step,Z} || {_,Step,{counter, _, Z}} <- UTrc],
+    WatchSetupStartClOps =
+        [{Step,ClOp} || {_,Step,{watch_setup_start,ClOp,_}} <- UTrc],
+    WatchSetupDoneClOps =
+        [{Step,ClOp} || {_,Step,{watch_setup_done,ClOp,_}} <- UTrc],
+    WatchNotifyClOps =
+        [{Step,ClOp,Z} || {_,Step,{watch_notify,ClOp,Z}} <- UTrc],
+    WatchNotifyMaybeClOps =
+        [{Step,ClOp,Z} || {_,Step,{watch_notify_maybe,ClOp,Z}} <- UTrc],
+
+    %% Baby step: If a {watch_notify,ClOp,_} is present,
+    %%            then a {watch_setup_done,ClOp,_} must be present earlier.
+    %%     TODO: How the heck do I express that in LTL, when there
+    %%           isn't an "earlier" operator.  This definitely isn't right:
+    %%               [] (watch_setup_done -> <> watch_notify)
+    %%
+    %%           Hmmm ... How about this, abusing the notation (if not the
+    %%           very idea) of a predicate?
+    %%               For all ClOp elements of watch_notify event list,
+    %%               [] (watch_setup_done(ClOp) -> <> watch_notify(ClOp))
+    C1 = [{X, Y} || {LaterStep,   ClOp_l, _Z} = X <- WatchNotifyClOps,
+                    {EarlierStep, ClOp_e}     = Y <- WatchSetupDoneClOps,
+                    ClOp_e == ClOp_l,
+                    EarlierStep > LaterStep],         % negate the desired cond!
+
+    %% Baby step: If a {watch_notify_maybe,ClOp,_} is present,
+    %%            then a {watch_setup_start,ClOp,_} must be present earlier.
+    C2 = [{X, Y} || {LaterStep,   ClOp_l, _Z} = X <- WatchNotifyMaybeClOps,
+                    {EarlierStep, ClOp_e}     = Y <- WatchSetupStartClOps,
+                    ClOp_e == ClOp_l,
+                    EarlierStep > LaterStep],         % negate the desired cond!
+
+    %% More interesting: If a {watch_notify,_,Z} is present,
+    %%                   then a {counter,_,Z} must be present earlier.
+    C3 = [{X, Y} || {LaterStep,_,Z_l} = X <- WatchNotifyClOps,
+                    {EarlierStep,Z_e} = Y <- CounterDefiniteZs,
+                    Z_e == Z_l,
+                    EarlierStep > LaterStep],         % negate the desired cond!
+
+    %% More interesting: If a {watch_maybe,_,Z} is present,
+    %%                   then a {counter_start_ph2,_,Z} must be present earlier.
+    C4 = [{X, Y} || {LaterStep,_,Z_l} = X <- WatchNotifyMaybeClOps,
+                    {EarlierStep,Z_e} = Y <- CounterStartZs,
+                    Z_e == Z_l,
+                    EarlierStep > LaterStep],         % negate the desired cond!
+
     ?WHENFAIL(
        io:format("Failed:\nF1 = ~p\nF2 = ~p\nEnd2 = ~P\n"
                  "Runnable = ~p, Receivable = ~p\n"
                  "Emitted counters = ~w\n"
                  "CounterOps ~p ?= Emitted ~p + Phase1QuorumFails ~p + Phase2Timeouts ~p\n"
-                 "# Unconsumed ~p, NumCrashes ~p\n",
+                 "# Unconsumed ~p, NumCrashes ~p\n"
+                 "C1 = ~p, C2 = ~p, C3 = ~p, C4 = ~p\n",
                  [F1, F2, Sched1, 250,
                   slf_msgsim:runnable_procs(Sched1),
                   slf_msgsim:receivable_procs(Sched1),
                   Emitted,
-                 length(CounterOps), length(Emitted), length(Phase1QuorumFails), length(Phase2Timeouts),
-                 length(Unconsumed), NumCrashes]),
+                  length(CounterOps), length(Emitted), length(Phase1QuorumFails), length(Phase2Timeouts),
+                  length(Unconsumed), NumCrashes,
+                  C1, C2, C3, C4]),
        classify(NumDrops /= 0, at_least_1_msg_dropped,
        measure("clients     ", NumClients,
        measure("servers     ", NumServers,
@@ -181,7 +225,9 @@ verify_property(NumClients, NumServers, _Props, F1, F2, Ops,
                length(Emitted) == length(lists:usort(Emitted)) andalso
                Emitted == lists:sort(Emitted) andalso
                Unconsumed == [] andalso
-               NumCrashes == 0
+               NumCrashes == 0 andalso
+               %% LTL-like time
+               C1 == [] andalso C2 == [] andalso C3 == [] andalso C4 == []
        end))))))))))))))))))))))).
 
 %%% Protocol implementation
