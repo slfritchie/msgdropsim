@@ -226,6 +226,17 @@ verify_property(NumClients, NumServers, _Props, F1, F2, Ops,
     %% of the increment phase 2.  To disambiguate, we must only test watch
     %% timeouts that were *definitely* setup before the end of incr phase 2.
     %%
+    %% Also, there's the possibility that a). an increment client gets a
+    %% timeout while waiting for phase 2 responses and decides that the op
+    %% was successful, and b). a watcher client in client_watch_waiting state
+    %% gets a timeout at the same time and gives up (and cancels its watch
+    %% requests).  The notification from the increment client in step a) will
+    %% arrive at the watcher proc "late".  We need to consider the late
+    %% arrival as OK: it isn't our fault if the client doesn't wait around
+    %% long enough for the change notification to arrive.  :-)
+
+    LateWatchNotifyReqClOps =
+        [ClOp || {_,_,{late_watch_notify_req,ClOp,_Z}} <- UTrc],
     C6 = [{X,Y,Z} || {Step_d,ClOp_d}      = X <- WatchSetupDoneClOps,
                      {Step_c,_Z,Watchers} = Y <- CounterDefiniteZs,
                      {Step_t,ClOp_t}      = Z <- WatchTimeoutClOps,
@@ -233,7 +244,8 @@ verify_property(NumClients, NumServers, _Props, F1, F2, Ops,
                      ClOp_t == ClOp_d,              %% honest race fixer part 1
                      Step_t > Step_c,               %% honest race fixer part 2
                      {_Client, ClOp_w} <- Watchers,
-                     ClOp_t == ClOp_w],
+                     ClOp_t == ClOp_w andalso
+                         not lists:member(ClOp_d, LateWatchNotifyReqClOps)],
 
     ?WHENFAIL(
        io:format("Failed:\nF1 = ~p\nF2 = ~p\nEnd2 = ~P\n"
@@ -242,7 +254,7 @@ verify_property(NumClients, NumServers, _Props, F1, F2, Ops,
                  "CounterOps ~p ?= Emitted ~p + Phase1QuorumFails ~p + Phase2Timeouts ~p\n"
                  "# Unconsumed ~p, NumCrashes ~p\n"
                  "C1 = ~p, C2 = ~p, C3 = ~p, C4 = ~p, C5 = ~p\n"
-                 "C6 = ~p\n",
+                 "C6 = ~p LateWatchNotifyReqClOps = ~p\n",
                  [F1, F2, Sched1, 250,
                   slf_msgsim:runnable_procs(Sched1),
                   slf_msgsim:receivable_procs(Sched1),
@@ -250,7 +262,7 @@ verify_property(NumClients, NumServers, _Props, F1, F2, Ops,
                   length(CounterOps), length(Emitted), length(Phase1QuorumFails), length(Phase2Timeouts),
                   length(Unconsumed), NumCrashes,
                   C1, C2, C3, C4, C5,
-                  C6]),
+                  C6, LateWatchNotifyReqClOps]),
        classify(NumDrops /= 0, at_least_1_msg_dropped,
        measure("clients     ", NumClients,
        measure("servers     ", NumServers,
@@ -355,7 +367,7 @@ client_init({watch_op, Servers}, _C) ->
                                           num_servers = length(Servers)}};
 client_init({watch_notify_req, ClOp, From, Z}, C) ->
     %% Race: this arrived late, need to respond to it, though.
-    slf_msgsim:add_utrace({late_watch_notify_req, Z}),
+    slf_msgsim:add_utrace({late_watch_notify_req, ClOp, Z}),
     slf_msgsim:bang(From, {watch_notify_resp, slf_msgsim:self(), ClOp, ok}),
     {recv_general, same, C};
 client_init({watch_notify_maybe_req, ClOp, From, Z}, C) ->
@@ -479,8 +491,9 @@ client_notif_resp_waiting(timeout, C = #c{watchers = Ws}) ->
             cl_send_notifications(C),
             {recv_timeout, same, C}
     end;
-client_notif_resp_waiting({watch_notify_req, ClOp, From, _Counter}, C) ->
+client_notif_resp_waiting({watch_notify_req, ClOp, From, Z}, C) ->
     %% Race: this arrived late, need to respond to it, though.
+    slf_msgsim:add_utrace({late_watch_notify_req, ClOp, Z}),
     slf_msgsim:bang(From, {watch_notify_resp, slf_msgsim:self(), ClOp, ok}),
     {recv_timeout, same, C};
 client_notif_resp_waiting({watch_notify_maybe_req, ClOp, From, _Z}, C) ->
@@ -538,10 +551,11 @@ client_watch_cancelling({watch_notify_maybe_req, ClOp, Server, _Z}, C) ->
     slf_msgsim:bang(Server, {watch_notify_maybe_resp,
                              slf_msgsim:self(), ClOp, ok}),
     {recv_timeout, same, C};
-client_watch_cancelling({watch_notify_req, ClOp, Server, _Counter}, C) ->
+client_watch_cancelling({watch_notify_req, ClOp, Server, Z}, C) ->
     %% Again, honest race: this may be the thing that we're trying to cancel.
     %% No matter, we need to ack it then go back to waiting for our
     %% cancel ack.
+    slf_msgsim:add_utrace({late_watch_notify_req, ClOp, Z}),
     slf_msgsim:bang(Server, {watch_notify_resp, slf_msgsim:self(), ClOp, ok}),
     {recv_timeout, same, C};
 client_watch_cancelling(timeout, C) ->
