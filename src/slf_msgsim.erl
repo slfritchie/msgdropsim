@@ -43,6 +43,7 @@
 
 -record(sched, {
           step = 0     :: integer(),  % Scheduling step #
+          stop_step    :: integer(),  % scheduling step # to stop at (debugging)
           numsent = 0  :: integer(),  % Number of messages sent
           tokens       :: list(atom()),% Process scheduler tokens
           crashed = [] :: list(atom()),% Processes that have crashed
@@ -74,7 +75,8 @@ new_sim(Clients, Servers, InitialMsgs, SchedOrder, Partitions, Delays,
     AllCSs = Clients ++ Servers,
     AllNames = lists:usort([Name || {Name, _St, _Recv} <- AllCSs]),
     MissingPs =  AllNames -- lists:usort(SchedOrder),% Add missing procs to toks
-    S = #sched{tokens = SchedOrder ++ MissingPs,
+    S = #sched{stop_step = proplists:get_value(stop_step, Options, 99999999999),
+               tokens = SchedOrder ++ MissingPs,
                procs = orddict:from_list([{Name, init_proc(ProcSpec)} ||
                                              {Name,_,_} = ProcSpec <- AllCSs]),
                partitions = make_partition_dict(Partitions),
@@ -203,14 +205,21 @@ receivable_procs(S) ->
 run_scheduler(S) ->
     run_scheduler(S, 10000).
 
-run_scheduler(S0, 0) ->
+run_scheduler(S, MaxIters) ->
+    try
+        run_scheduler2(S, MaxIters)
+    catch throw:{stop_step_hit, LastS} ->
+            {false, LastS}
+    end.
+
+run_scheduler2(S0, 0) ->
     %% Run one more time: if the processes are stupid enough to
     %% consume timeout messages without doing The Right Thing, then S1
     %% should have the last timeout message consumed so that all procs
     %% in S1 is neither runnable nor receivable.
     S1 = run_scheduler_with_tokens(S0#sched.tokens, S0),
     {runnable_any_proc_p(S1) orelse receivable_any_proc_p(S1), S1};
-run_scheduler(S0, MaxIters) ->
+run_scheduler2(S0, MaxIters) ->
     S1 = run_scheduler_with_tokens(S0#sched.tokens, S0),
     if S0#sched.step == S1#sched.step ->
             %% No work was done on that iteration, need to send 'timeout'?
@@ -225,11 +234,10 @@ run_scheduler(S0, MaxIters) ->
                            fun(Proc, S) ->
                                    bang(scheduler, Proc, timeout, false, S)
                            end, S1, Waiters),
-                    %% run_scheduler(incr_step(S2), MaxIters - 1)
-                    run_scheduler(S2, MaxIters - 1)
+                    run_scheduler2(S2, MaxIters - 1)
             end;
         true ->
-            run_scheduler(S1, MaxIters - 1)
+            run_scheduler2(S1, MaxIters - 1)
     end.
 
 run_scheduler_with_tokens(Tokens, Schedule) ->
@@ -241,8 +249,9 @@ run_scheduler_with_tokens(Tokens, Schedule) ->
             NewS
     end.
 
-%% consume_scheduler_token(check_runnable, S) when is_atom(ProcName) ->
-%%     {false, S};
+consume_scheduler_token(_Proc, S = #sched{step = Step, stop_step = StopStep})
+  when Step >= StopStep ->
+    throw({stop_step_hit, S});
 consume_scheduler_token(ProcName, S) when is_atom(ProcName) ->
     P = fetch_proc(ProcName, S),
     consume_scheduler_token(P, S, 0).
@@ -273,7 +282,7 @@ consume_scheduler_token(P = #proc{mbox = Mbox, outbox = Outbox},
             end;
         outbox when OutboxNotEmpty ->
             case queue:out(P#proc.outbox) of
-                {{value, {IMsg, X}}, Q2} when X < 0 ->
+                {{value, {IMsg, X}}, _Q2} when X < 0 ->
                     exit({bad_outbox, P#proc.name, IMsg, count, X});
                 {{value, {IMsg, 0}}, Q2} ->
                     deliver_rotate_and_incr_step(IMsg, Q2, P#proc.name, S);
