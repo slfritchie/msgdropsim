@@ -153,7 +153,7 @@ all_nodes(VClock) ->
 % @doc Return a timestamp for a vector clock
 -spec timestamp() -> timestamp().
 timestamp() ->
-    calendar:datetime_to_gregorian_seconds(erlang:universaltime()).
+    now().
 
 % @doc Compares two VClocks for equality.
 %      Not very fast.
