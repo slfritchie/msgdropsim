@@ -286,7 +286,6 @@ verify_property(NumClients, NumServers, _Props, F1, F2, Ops,
        measure("watch maybes", WatchMaybes,
        measure("watch t.out ", WatchTimeouts,
        begin
-           %% TODO: verify properties of watcher utrace output!
            Runnable == false andalso
            length(CounterOps) == length(Emitted) +
                length(Phase1QuorumFails) +
@@ -571,8 +570,7 @@ client_watch_waiting({watch_notify_req, ClOp, From, Z}, #c{clop = ClOp}) ->
 %%       or keep things as they are: a maybe is a maybe
 client_watch_waiting({watch_notify_maybe_req, ClOp, From, Z},
                      #c{clop = ClOp}) ->
-    io:format("m"),
-    slf_msgsim:add_utrace({watch_maybe, ClOp, Z}),
+    slf_msgsim:add_utrace({watch_notify_maybe, ClOp, Z}),
     slf_msgsim:bang(From, {watch_notify_maybe_resp, slf_msgsim:self(), ClOp, ok}),
     {recv_general, client_init, #c{}};
 client_watch_waiting({watch_setup_resp, ClOp, _Server, ok} = Msg,
@@ -581,7 +579,28 @@ client_watch_waiting({watch_setup_resp, ClOp, _Server, ok} = Msg,
     NumResps = NumResps0 + 1,
     Oks = [Msg|Oks0],
     {recv_timeout, same, C#c{num_responses = NumResps, ph1_oks = Oks}};
-client_watch_waiting(timeout, C = #c{clop = ClOp}) ->
+client_watch_waiting(timeout, C) ->
+    {recv_timeout, client_watch_waiting_2, C}.
+
+client_watch_waiting_2({watch_notify_req, ClOp, From, Z}, #c{clop = ClOp}) ->
+    slf_msgsim:add_utrace({watch_notify, ClOp, Z}),
+    slf_msgsim:bang(From, {watch_notify_resp, slf_msgsim:self(), ClOp, ok}),
+    {recv_general, client_init, #c{}};
+%% TODO: Figure out if it's best to wait for more maybe notifications
+%%       (because a quorum of maybes change =?= definite change?)
+%%       or keep things as they are: a maybe is a maybe
+client_watch_waiting_2({watch_notify_maybe_req, ClOp, From, Z},
+                     #c{clop = ClOp}) ->
+    slf_msgsim:add_utrace({watch_notify_maybe, ClOp, Z}),
+    slf_msgsim:bang(From, {watch_notify_maybe_resp, slf_msgsim:self(), ClOp, ok}),
+    {recv_general, client_init, #c{}};
+client_watch_waiting_2({watch_setup_resp, ClOp, _Server, ok} = Msg,
+                     C = #c{clop = ClOp,
+                            num_responses = NumResps0, ph1_oks = Oks0}) ->
+    NumResps = NumResps0 + 1,
+    Oks = [Msg|Oks0],
+    {recv_timeout, same, C#c{num_responses = NumResps, ph1_oks = Oks}};
+client_watch_waiting_2(timeout, C = #c{clop = ClOp}) ->
     slf_msgsim:add_utrace({watch_timeout, ClOp}),
     cl_watch_send_cancels(C).
 
