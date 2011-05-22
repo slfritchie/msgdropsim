@@ -22,6 +22,12 @@
 %%% specific language governing permissions and limitations
 %%% under the License.
 %%%-------------------------------------------------------------------
+%%%
+%%% Example usage:
+%%%
+%%% eqc:quickcheck(eqc:numtests(1*1000,slf_msgsim_qc:prop_simulate(echo_bad1_sim, []))).
+%%%
+
 -module(echo_bad1_sim).
 
 -compile(export_all).
@@ -79,9 +85,12 @@ verify_property(NumClients, NumServers, _Props, F1, F2, Ops,
        measure("msgs dropped", NumDrops,
        measure("timeouts    ", NumTimeouts,
        begin
-           conjunction([{runnable, Runnable == false},
-                        {all_ok, slf_msgsim_qc:check_exact_msg_or_timeout(
-                                   Clients, Predicted, Actual)}])
+           %% conjunction([{runnable, Runnable == false},
+           %%              {all_ok, slf_msgsim_qc:check_exact_msg_or_timeout(
+           %%                         Clients, Predicted, Actual)}])
+           Runnable == false andalso
+               slf_msgsim_qc:check_exact_msg_or_timeout(
+                 Clients, Predicted, Actual)
        end)))))))).    
 
 predict_echos(Clients, Ops) ->

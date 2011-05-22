@@ -20,6 +20,11 @@
 %%% specific language governing permissions and limitations
 %%% under the License.
 %%%-------------------------------------------------------------------
+%%%
+%%% Example usage:
+%%%
+%%% eqc:quickcheck(eqc:numtests(1*1000,slf_msgsim_qc:prop_simulate(multiask_fairness_sim, []))).
+%%%
 -module(multiask_fairness_sim).
 
 -compile(export_all).

@@ -59,6 +59,11 @@
 %%% specific language governing permissions and limitations
 %%% under the License.
 %%%-------------------------------------------------------------------
+%%% Example usage:
+%%%
+%%% eqc:quickcheck(eqc:numtests(1*1000,slf_msgsim_qc:prop_simulate(lcr_sim, [disable_partitions]))).
+%%% eqc:quickcheck(eqc:numtests(1*1000,slf_msgsim_qc:prop_simulate(lcr_sim, []))).
+%%%
 -module(lcr_sim).
 
 -compile(export_all).
@@ -141,8 +146,10 @@ verify_property(_NumClients, NumServers, Props, F1, F2, Ops,
        measure("timeouts    ", NumTimeouts,
        measure("len(tokens) ", length(slf_msgsim:get_tokens(Sched1)),
        begin
-           conjunction([{runnable, Runnable == false},
-                        {one_leader, one_leader_p(NumServers, UTrc)}])
+           %% conjunction([{runnable, Runnable == false},
+           %%              {one_leader, one_leader_p(NumServers, UTrc)}])
+           Runnable == false andalso
+               one_leader_p(NumServers, UTrc)
        end))))))))).
 
 one_leader_p(NumServers, [{Server, _Seq, {i_am_leader, Server}} = _X]) ->

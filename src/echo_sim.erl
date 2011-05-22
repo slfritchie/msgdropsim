@@ -93,9 +93,12 @@ verify_property(NumClients, NumServers, _Props, F1, F2, Ops,
        measure("msgs delayed", NumDelays,
        measure("timeouts    ", NumTimeouts,
        begin
-           conjunction([{runnable, Runnable == false},
-                        {all_ok, slf_msgsim_qc:check_exact_msg_or_timeout(
-                                   Clients, Predicted, Actual)}])
+           %% conjunction([{runnable, Runnable == false},
+           %%              {all_ok, slf_msgsim_qc:check_exact_msg_or_timeout(
+           %%                         Clients, Predicted, Actual)}])
+           Runnable == false andalso
+               slf_msgsim_qc:check_exact_msg_or_timeout(
+                 Clients, Predicted, Actual)
        end))))))))).
 
 predict_echos(Clients, Ops) ->

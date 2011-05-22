@@ -22,6 +22,12 @@
 %%% specific language governing permissions and limitations
 %%% under the License.
 %%%-------------------------------------------------------------------
+%%%
+%%% Example usage:
+%%%
+%%% eqc:quickcheck(eqc:numtests(1*1000,slf_msgsim_qc:prop_simulate(distrib_counter_bad4_sim, []))).
+%%%
+
 -module(distrib_counter_bad4_sim).
 
 -compile(export_all).
@@ -93,11 +99,15 @@ verify_property(NumClients, NumServers, _Props, F1, F2, Ops,
        measure("msgs dropped", NumDrops,
        measure("timeouts    ", NumTimeouts,
        begin
-           conjunction([{runnable, Runnable == false},
-                        {ops_finish, length(Ops) == length(UTrc)},
-                        {emits_unique, length(Emitted) ==
-                                      length(lists:usort(Emitted))},
-                        {per_client_not_retro, not ClientRetroP}])
+           %% conjunction([{runnable, Runnable == false},
+           %%              {ops_finish, length(Ops) == length(UTrc)},
+           %%              {emits_unique, length(Emitted) ==
+           %%                            length(lists:usort(Emitted))},
+           %%              {per_client_not_retro, not ClientRetroP}])
+           Runnable == false andalso
+               length(Ops) == length(UTrc) andalso
+               length(Emitted) == length(lists:usort(Emitted)) andalso
+               not ClientRetroP
        end))))))))))).
 
 %%% Protocol implementation

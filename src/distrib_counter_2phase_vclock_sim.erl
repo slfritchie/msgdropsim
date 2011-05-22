@@ -20,6 +20,12 @@
 %%% specific language governing permissions and limitations
 %%% under the License.
 %%%-------------------------------------------------------------------
+%%%
+%%% Example usage:
+%%%
+%%% eqc:quickcheck(eqc:numtests(1*1000,slf_msgsim_qc:prop_simulate(distrib_counter_2phase_vclock_sim, []))).
+%%%
+
 -module(distrib_counter_2phase_vclock_sim).
 
 -compile(export_all).

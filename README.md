@@ -40,11 +40,10 @@ above list.
    prevent the use of PropEr for generating any of the test cases
    within the simulator.  I simply haven't had time to try using
    PropEr yet.
-
 4. Yes.  We use QuickCheck again to specify when network partitions
-   happen during a simulated test run: For none/some/many {t0, t1, A, B},
-   then between simulated time t0 and t1, any message from a process
-   in set A that sent to a process in set B will be dropped.
+   happen during a simulated test run: For none/some/many `{t0,t1,A,B}`,
+   then between simulated time **t0** and **t1**, any message from a process
+   in set **A** that sent to a process in set **B** will be dropped.
 5. No.  Exhaustive exploration of the entire state space is beyond the
    scope of this tool.  However, it's my hope that this tool points
    the way for something similarly easy for
@@ -54,23 +53,67 @@ above list.
 How to run simulated protocols
 ------------------------------
 
-TODO Finish this section
+    $ cd /path/to/top/of/msgdropsim
+    $ make
+    $ erl -pz ./ebin
+    [... Erlang VM starts up]
+    > eqc:quickcheck(slf_msgsim_qc:prop_simulate(echomany_sim, [])).
 
-See the top of each `.erl` file in the `src` directory for
+Also: See the top of each `.erl` file in the `src` directory for
 instructions or pointers to instructions.
 
-All of the buggy simulator code in a file `foo.erl` has a
-corresponding text file called `foo.txt` which contains:
+General usage:
 
-* Instructions on how to run the test case
-* Output from the test case
-* Annotations within the output, marked by `%%` characters, that help
-  explain what the output means.
+    eqc:quickcheck(slf_msgsim_qc:prop_simulate(SimModuleName, OptionsList)).
 
-Suggestions for following the evolution of a flawed protocol
-------------------------------------------------------------
+* `SimModuleName` is a protocol simulation implementation
+module such as `echo_sim` or `distrib_counter_2phase_vclocksetwatch`.
+* `OptionsList` is a list of zero or more of the following options:
+<pre>
+    [{min_clients, N}, {max_clients, M},  %% defaults: N=1, M=9
+     {min_servers, N}, {max_servers, M},  %% defaults: N=1, M=9
+     disable_partitions,                  %% disable network partitions
+     disable_delays                       %% disable message delays
+     {min_keys, N},                       %% typically not implemented
+     {max_keys, N},                       %% typically not implemented
+     crash_report,                        %% enable verbose report upon crash
+     {stop_step, N}]                      %% stop execution at step N
+</pre>
 
-The simulator source contains code for simulating two protocols
+For example:
+
+    eqc:quickcheck(slf_msgsim_qc:prop_simulate(distrib_counter_2phase_vclocksetwatch_sim, [])).
+
+By default, QuickCheck will run 100 random test cases.  For a protocol
+simulation, that usually isn't enough cases to find bugs in even a
+simple protocol.
+
+* The argument to `eqc:quickcheck/1` is a property.
+* The return value of `slf_msgsim_qc:prop_simulate(SimModuleName, OptionsList)`
+  is a property.
+  * So the example above,
+    `eqc:quickcheck(slf_msgsim_qc:prop_simulate(SimModuleName,
+    OptionsList)).`, works as you'd expect.
+* If you wish to run 5,000 test cases with a property **Property**, then
+  use the construct `eqc:quickcheck(eqc:numtests(5000, Property)).`
+* If you wish to make each individual test case longer, i.e., to
+  contain longer sequences of protocol operations, use the construct
+  `eqc:quickcheck(eqc_gen:resize(R, Property)).` where **R** is an integer
+  larger than 40.  The effect seems to be exponential: test cases with
+  **R=100** are much, much longer than tests that use **R=50**.
+* The `resize()` and `numtests()` wrappers can be used together, e.g.,
+  `eqc:quickcheck(eqc:numtests(5000, eqc_gen:resize(60, Property)))`
+
+For example, to run 10,000 test cases of the
+`distrib_counter_2phase_vclocksetwatch_sim` simulator:
+
+    eqc:quickcheck(eqc:numtests(10*1000,slf_msgsim_qc:prop_simulate(distrib_counter_2phase_vclocksetwatch_sim, [{max_clients,9}, {max_servers,9}]))).
+
+
+Describing the evolution of two flawed protocols
+------------------------------------------------
+
+The simulator source contains code for simulating two protocols:
 
 * An echo service, one flawed and one ok.
   * The source for these are `echo_bad1_sim.erl` and `echo_sim.erl`,
@@ -81,7 +124,15 @@ The simulator source contains code for simulating two protocols
   * The sources for these are `distrib_counter_bad1_sim.erl` through
     `distrib_counter_bad5_sim.erl`.
 
-The previous section mentioned the `foo.txt` file that has annotated
+All of the buggy simulator code in a file `foo.erl` has a
+corresponding text file called `foo.txt` which contains:
+
+* Instructions on how to run the test case
+* Output from the test case
+* Annotations within the output, marked by `%%` characters, that help
+  explain what the output means.
+
+The `foo.txt` file has annotated
 simulator output and discussion of what's wrong with each
 implementation, e.g. `echo_bad1_sim.txt` and
 `distrib_counter_bad1_sim.txt`.
@@ -139,10 +190,10 @@ Future work
   older simulator modules were developed using
   [Quviq's](http://www.quviq.com) commercial version of QuickCheck and
   use at least one construct that is not present in the "Mini" version.
-** The big one that I know of is the
-  `conjunction([{Label1,Boolean1},{Label2,Boolean2}...])`
-   feature.  For use with QuickCheck Mini, that statement can simply be
-   replaced with some plain Erlang: `Boolean1 andalso Boolean2 andalso ...`.
+  * The big one that I know of is the
+    `conjunction([{Label1,Boolean1},{Label2,Boolean2}...])`
+     feature.  For use with QuickCheck Mini, that statement can simply be
+     replaced with some plain Erlang: `Boolean1 andalso Boolean2 andalso ...`.
 * Add support for simulated Erlang monitors, Erlang's method for
   informing processes that messages may have been dropped.
 * Investigate integration of message dropping (and perhaps also
