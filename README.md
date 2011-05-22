@@ -44,6 +44,9 @@ above list.
    happen during a simulated test run: For none/some/many `{t0,t1,A,B}`,
    then between simulated time **t0** and **t1**, any message from a process
    in set **A** that sent to a process in set **B** will be dropped.
+   * Note that these network partitions can be asymmetric: process
+   **C** can be partitioned from process **D**, but **D** can send
+   messages to **C**.
 5. No.  Exhaustive exploration of the entire state space is beyond the
    scope of this tool.  However, it's my hope that this tool points
    the way for something similarly easy for
