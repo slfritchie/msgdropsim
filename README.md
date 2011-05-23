@@ -188,15 +188,6 @@ arrest me.)
 Future work
 -----------
 
-* Finish converting simulator modules to use QuickCheck
-  [QuickCheck "Mini"](http://www.quviq.com/news100621.html).  All of the
-  older simulator modules were developed using
-  [Quviq's](http://www.quviq.com) commercial version of QuickCheck and
-  use at least one construct that is not present in the "Mini" version.
-  * The big one that I know of is the
-    `conjunction([{Label1,Boolean1},{Label2,Boolean2}...])`
-     feature.  For use with QuickCheck Mini, that statement can simply be
-     replaced with some plain Erlang: `Boolean1 andalso Boolean2 andalso ...`.
 * Add support for simulated Erlang monitors, Erlang's method for
   informing processes that messages may have been dropped.
 * Investigate integration of message dropping (and perhaps also
