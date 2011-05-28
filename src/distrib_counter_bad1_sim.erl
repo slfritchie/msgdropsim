@@ -118,6 +118,8 @@ verify_mc_property(_NumClients, _NumServers, ModProps, _F1, _F2,
                    Ops, ClientResults) ->
     AllEmitted = lists:flatten(ClientResults),
     EmittedByEach = [Val || {counter, Val} <- ClientResults],
+    XX = length([x || {counter, timeout} <- AllEmitted]),
+    if XX > 0 -> io:format(user, "~p,", [XX]); true -> ok end,
     Check = fun() ->
                     lists:all(fun(X) when is_integer(X) -> true;
                                  (_)                    -> false
@@ -282,11 +284,11 @@ e_counter_server_loop(Count) ->
     end.
 
 my_bang(Rcpt, Msg) ->
-    %% mce_erl:choice([
-    %%                 {fun() -> Rcpt ! Msg end, []},
-    %%                 {fun() -> do_nothing end, []}
-    %%                ]).
-    Rcpt ! Msg.
+    mce_erl:choice([
+                    {fun() -> Rcpt ! Msg end, []},
+                    {fun() -> do_nothing end, []}
+                   ]).
+    %% Rcpt ! Msg.
 
 my_self() ->
     %% erlang:self().
