@@ -114,34 +114,33 @@ verify_property(NumClients, NumServers, _Props, F1, F2, Ops,
                %%   Emitted == lists:sort(Emitted)
        end))))))))))).
 
-verify_mc_property(_NumClients, _NumServers, ModProps, _F1, _F2,
+verify_mc_property(NumClients, _NumServers, ModProps, _F1, _F2,
                    Ops, ClientResults) ->
     AllEmitted = lists:flatten(ClientResults),
-    EmittedByEach = [Val || {counter, Val} <- ClientResults],
+    Clients = lists:sublist(all_clients(), 1, NumClients),
+    F_retro = fun(Clnt) ->
+                      L = [Count || {Cl,{counter, Count}} <- AllEmitted,
+                                    Count /= timeout, Cl == Clnt],
+                      %% Retrograde counter?
+                      L /= lists:usort(L)
+              end,
+    ClientRetroP = lists:any(F_retro, Clients),
     Check = fun() ->
-                    %% lists:all(fun(X) when is_integer(X) -> true;
-                    %%              (_)                    -> false
-                    %%           end, [Val || {counter, Val} <- AllEmitted])
-                    %%     andalso
                     if length(Ops) == length(AllEmitted) ->
                             ok;
                        true ->
                             exit({num_ops, length(Ops), all_emitted, AllEmitted})
                     end,
-                    case [x || EmitList <- EmittedByEach,
-                               EmitList == lists:sort(EmitList),
-                               EmitList == lists:usort(EmitList)] of
-                        [] ->
+                    if not ClientRetroP ->
                             ok;
-                        _ ->
-                            exit({emitted_by_each, EmittedByEach})
+                       true ->
+                            exit({all_emitted, AllEmitted})
                     end,
                     true
             end,
     case proplists:get_value(no_generator, ModProps, false) of
         false ->
-            ?WHENFAIL(io:format("Ops ~p\nAll Emitted ~p\nBy each ~p\n",
-                                [Ops, AllEmitted, EmittedByEach]),
+            ?WHENFAIL(io:format("Ops ~p\nAll Emitted ~p\n", [Ops, AllEmitted]),
                       Check());
         true ->
             Check()
@@ -264,7 +263,7 @@ e_counter_client1_reply({Waiting, Replies})->
             case Waiting -- [Server] of
                 [] ->
                     Val = make_val(Replies2),
-                    {counter, Val};             % "emit"
+                    {my_self(), {counter, Val}}; % "emit"
                 Waiting2 ->
                     e_counter_client1_reply({Waiting2, Replies2})
             end;
@@ -276,7 +275,7 @@ e_counter_client1_reply({Waiting, Replies})->
                      true ->
                           make_val(Replies)
                   end,
-            {counter, Val}                      % "emit"
+            {my_self(), {counter, Val}}         % "emit"
     end.
 
 e_counter_server(_Ops, State) ->
