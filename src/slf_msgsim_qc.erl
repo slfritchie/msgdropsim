@@ -152,12 +152,8 @@ check_exact_msg_or_timeout(Clients, Predicted, Actual) ->
       end, Clients).                                
 
 prop_simulate(Module, ModProps) ->
-    MinClients = proplists:get_value(min_clients, ModProps, 1),
-    MaxClients = proplists:get_value(max_clients, ModProps, 5),
-    MinServers = proplists:get_value(min_servers, ModProps, 1),
-    MaxServers = proplists:get_value(max_servers, ModProps, 5),
-    MinKeys = proplists:get_value(min_keys, ModProps, 1),
-    MaxKeys = proplists:get_value(max_keys, ModProps, 1),
+    {MinClients, MaxClients, MinServers, MaxServers, MinKeys, MaxKeys} =
+        get_settings(ModProps),
     ?FORALL({NumClients, NumServers, NumKeys} = F1,
             {my_choose(MinClients, MaxClients),
              my_choose(MinServers, MaxServers),
@@ -183,6 +179,54 @@ prop_simulate(Module, ModProps) ->
             end
            )).
 
+prop_mc_simulate(Module, ModProps) ->
+    {MinClients, MaxClients, MinServers, MaxServers, MinKeys, MaxKeys} =
+        get_settings(ModProps),
+    ?FORALL({NumClients, NumServers, NumKeys} = F1,
+            {my_choose(MinClients, MaxClients),
+             my_choose(MinServers, MaxServers),
+             my_choose(MinKeys, MaxKeys)},
+    ?FORALL({ClientInits, ServerInits} = F2,
+            {Module:gen_client_initial_states(NumClients, ModProps),
+             Module:gen_server_initial_states(NumServers, ModProps)},
+    begin
+        ServerPids = [spawn_link(fun() -> Module:e_counter_server(x, St) end) ||
+                         {_, St, _} <- ServerInits],
+        ModProps2 = [{server_pids, ServerPids}|ModProps],
+    ?FORALL(Ops,
+            Module:gen_initial_ops(NumClients, NumServers, NumKeys, ModProps2),
+            begin
+                OpsD0 = orddict:from_list([{Cl,[]} || {Cl,_,_} <- ClientInits]),
+                OpsD1 = lists:foldl(fun({Cl, Op}, Dict) ->
+                                            orddict:append(Cl, Op, Dict)
+                                    end, OpsD0, Ops),
+                Parent = self(),
+                ClPids = [spawn_link(fun() ->
+                                             Ops_c = orddict:fetch(Cl, OpsD1),
+                                             V = Module:e_counter_client(Ops_c,
+                                                                         St),
+                                             Parent ! {self(), V},
+                                             exit(normal)
+                                     end) || {Cl, St, _} <- ClientInits],
+                %% io:format("Ops = ~p\n", [Ops]),
+                %% io:format("ClPids = ~p\n", [ClPids]),
+                ClientResults = harvest_client_results(ClPids),
+                [Svr ! shutdown || Svr <- ServerPids],
+                Module:verify_mc_property(NumClients, NumServers, ModProps,
+                                          F1, F2, Ops, ClientResults)
+            end
+            )
+    end
+    )).
+
+get_settings(ModProps) ->
+    {proplists:get_value(min_clients, ModProps, 1),
+     proplists:get_value(max_clients, ModProps, 5),
+     proplists:get_value(min_servers, ModProps, 1),
+     proplists:get_value(max_servers, ModProps, 5),
+     proplists:get_value(min_keys, ModProps, 1),
+     proplists:get_value(max_keys, ModProps, 1)}.
+
 my_choose(_, 0) ->
     0;
 my_choose(N, M) ->
@@ -193,3 +237,10 @@ my_list_elements([]) ->
 my_list_elements(L) ->
     list(elements(L)).
 
+harvest_client_results(Pids) ->
+    [receive
+         {Pid, X} ->
+             X
+     after 100 ->
+             hey_timeout_bad
+     end || Pid <- Pids].

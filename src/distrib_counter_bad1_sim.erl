@@ -37,13 +37,15 @@
 %%% Generators
 
 %% required
-gen_initial_ops(NumClients, NumServers, _NumKeys, _Props) ->
-    list(gen_counter_op(NumClients, NumServers)).
+gen_initial_ops(NumClients, NumServers, _NumKeys, Props) ->
+    ServerPids = proplists:get_value(server_pids, Props,
+                                     lists:sublist(all_servers(), NumServers)),
+    list(gen_counter_op(NumClients, ServerPids)).
 
-gen_counter_op(NumClients, NumServers) ->
+gen_counter_op(NumClients, ServerPids) ->
     ?LET(ClientI, choose(1, NumClients),
          {lists:nth(ClientI, all_clients()),
-          {counter_op, lists:sublist(all_servers(), NumServers)}}).
+          {counter_op, ServerPids}}).
 
 %% required
 gen_client_initial_states(NumClients, _Props) ->
@@ -111,6 +113,21 @@ verify_property(NumClients, NumServers, _Props, F1, F2, Ops,
                %%   length(Emitted) == length(lists:usort(Emitted)) andalso
                %%   Emitted == lists:sort(Emitted)
        end))))))))))).
+
+verify_mc_property(_NumClients, _NumServers, _ModProps, _F1, _F2,
+                   Ops, ClientResults) ->
+    AllEmitted = lists:flatten(ClientResults),
+    EmittedByEach = [Val || {counter, Val} <- ClientResults],
+    %% if length(Ops) == 10, length(ClientResults) > 3 ->
+    %%         io:format("\n~p\n", [ClientResults]);
+    %%    true ->
+    %%         ok 
+    %% end,
+    length(Ops) == length(AllEmitted) andalso
+        [] == [x || EmitList <- EmittedByEach,
+                    EmitList == lists:sort(EmitList),
+                    EmitList == lists:usort(EmitList)].
+
 
 %%% Protocol implementation
 
@@ -206,3 +223,59 @@ all_clients() ->
 
 all_servers() ->
     [s1, s2, s3, s4, s5, s6, s7, s8, s9].
+
+%%% Erlang direct style implementation
+
+startup(client) ->
+    fun e_counter_client/2;
+startup(server) ->
+    fun e_counter_server/2.
+
+e_counter_client(Ops, State) ->
+    [e_counter_client1(Op, State) || Op <- Ops].
+
+e_counter_client1({counter_op, Servers}, _State) ->
+    [my_bang(Server, {incr_counter, self()}) ||
+        Server <- Servers],
+    e_counter_client1_reply({Servers, []}).
+
+e_counter_client1_reply({Waiting, Replies})->
+    receive
+        {incr_counter_reply, Server, Count} ->
+            Replies2 = [{Server, Count}|Replies],
+            case Waiting -- [Server] of
+                [] ->
+                    Val = make_val(Replies2),
+                    {counter, Val};             % "emit"
+                Waiting2 ->
+                    e_counter_client1_reply({Waiting2, Replies2})
+            end;
+        shutdown ->
+            shutdown
+    after 100 ->
+            Val = if length(Waiting) >= length(Replies) ->
+                          timeout;
+                     true ->
+                          make_val(Replies)
+                  end,
+            {counter, Val}                      % "emit"
+    end.
+
+e_counter_server(_Ops, State) ->
+    e_counter_server_loop(State).
+
+e_counter_server_loop(Count) ->
+    receive
+        {incr_counter, From} ->
+            my_bang(From, {incr_counter_reply, self(), Count}),
+            e_counter_server_loop(Count + 1);
+        shutdown ->
+            Count
+    end.
+                
+my_bang(Rcpt, Msg) ->
+    %% mce_erl:choice([
+    %%                 {fun() -> Rcpt ! Msg end, []},
+    %%                 {fun() -> do_nothing end, []}
+    %%                ]).
+    Rcpt ! Msg.
