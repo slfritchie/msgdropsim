@@ -234,9 +234,9 @@ prop_mc_simulate2(Module, ModProps, NumClients, NumServers, _NumKeys,
 
 get_settings(ModProps) ->
     {proplists:get_value(min_clients, ModProps, 1),
-     proplists:get_value(max_clients, ModProps, 5),
+     proplists:get_value(max_clients, ModProps, 9),
      proplists:get_value(min_servers, ModProps, 1),
-     proplists:get_value(max_servers, ModProps, 5),
+     proplists:get_value(max_servers, ModProps, 9),
      proplists:get_value(min_keys, ModProps, 1),
      proplists:get_value(max_keys, ModProps, 1)}.
 
