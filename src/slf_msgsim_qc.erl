@@ -149,7 +149,7 @@ check_exact_msg_or_timeout(Clients, Predicted, Actual) ->
                            ({_X, server_timeout}) -> true;
                            (_)                    -> false
                         end, lists:zip(Pred, Act))
-      end, Clients).                                
+      end, Clients).
 
 prop_simulate(Module, ModProps) ->
     {MinClients, MaxClients, MinServers, MaxServers, MinKeys, MaxKeys} =
