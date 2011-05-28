@@ -186,8 +186,9 @@ prop_mc_simulate(Module, ModProps) ->
             {my_choose(MinClients, MaxClients),
              my_choose(MinServers, MaxServers),
              my_choose(MinKeys, MaxKeys)},
-    ?FORALL({ClientInits, ServerInits} = F2,
-            {Module:gen_client_initial_states(NumClients, ModProps),
+    ?FORALL({Ops, ClientInits, ServerInits} = F2,
+            {Module:gen_initial_ops(NumClients, NumServers, NumKeys, ModProps),
+             Module:gen_client_initial_states(NumClients, ModProps),
              Module:gen_server_initial_states(NumServers, ModProps)},
     begin
         [begin catch unlink(whereis(Proc)),
@@ -195,42 +196,30 @@ prop_mc_simulate(Module, ModProps) ->
          end || Proc <- Module:all_clients() ++ Module:all_servers()],
         erlang:yield(),
         ServerPids = [spawn(fun() ->
-                                         register(Svr, self()),
-                                         receive {ping, From} ->
-                                                 From ! pong
-                                         end,
-                                         Module:e_counter_server(x, St)
-                                 end) || {Svr, St, _} <- ServerInits],
-        [Server ! {ping, self()} || Server <- ServerPids],
-        [receive pong -> ok after 100 -> bummer end || _Server <- ServerPids],
-        ModProps2 = ModProps, %% ModProps2 = [{server_pids, ServerPids}|ModProps],
-    ?FORALL(Ops,
-            Module:gen_initial_ops(NumClients, NumServers, NumKeys, ModProps2),
-            begin
-                OpsD0 = orddict:from_list([{Cl,[]} || {Cl,_,_} <- ClientInits]),
-                OpsD1 = lists:foldl(fun({Cl, Op}, Dict) ->
-                                            orddict:append(Cl, Op, Dict)
-                                    end, OpsD0, Ops),
-                Parent = self(),
-                ClPids = [spawn(fun() ->
-                                             register(Cl, self()),
-                                             Ops_c = orddict:fetch(Cl, OpsD1),
-                                             V = Module:e_counter_client(Ops_c,
-                                                                         St),
-                                             Parent ! {self(), V},
-                                             exit(normal)
-                                     end) || {Cl, St, _} <- ClientInits],
-                %% io:format("Ops = ~p\n", [Ops]),
-                %% io:format("ClPids = ~p\n", [ClPids]),
-                ClientResults = harvest_client_results(ClPids),
-                [Svr ! shutdown || Svr <- ServerPids],
+                                    register(Svr, self()),
+                                    set_self(Svr),
+                                    Module:e_counter_server(x, St)
+                            end) || {Svr, St, _} <- ServerInits],
+        OpsD0 = orddict:from_list([{Cl,[]} || {Cl,_,_} <- ClientInits]),
+        OpsD1 = lists:foldl(fun({Cl, Op}, Dict) ->
+                                    orddict:append(Cl, Op, Dict)
+                            end, OpsD0, Ops),
+        Parent = self(),
+        ClPids = [spawn(fun() ->
+                                register(Cl, self()),
+                                set_self(Cl),
+                                Ops_c = orddict:fetch(Cl, OpsD1),
+                                V = Module:e_counter_client(Ops_c, St),
+                                Parent ! {self(), V},
+                                exit(normal)
+                        end) || {Cl, St, _} <- ClientInits],
+        ClientResults = harvest_client_results(ClPids),
+        [Svr ! shutdown || Svr <- ServerPids],
         [begin catch unlink(whereis(Proc)),
                catch exit(whereis(Proc), kill)
          end || Proc <- Module:all_clients() ++ Module:all_servers()],
                 Module:verify_mc_property(NumClients, NumServers, ModProps,
                                           F1, F2, Ops, ClientResults)
-            end
-            )
     end
     )).
 
@@ -259,3 +248,9 @@ harvest_client_results(Pids) ->
      after 1250 ->
              hey_timeout_bad
      end || Pid <- Pids].
+
+set_self(Name) ->
+    erlang:put({?MODULE, self}, Name).
+
+get_self() ->
+    erlang:get({?MODULE, self}).

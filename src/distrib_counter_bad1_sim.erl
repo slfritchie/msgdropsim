@@ -234,10 +234,9 @@ e_counter_client(Ops, State) ->
     [e_counter_client1(Op, State) || Op <- Ops].
 
 e_counter_client1({counter_op, Servers}, _State) ->
-    [my_bang(Server, {incr_counter, self()}) ||
+    [my_bang(Server, {incr_counter, my_self()}) ||
         Server <- Servers],
-    ServerPids = [whereis(Server) || Server <- Servers],
-    e_counter_client1_reply({ServerPids, []}).
+    e_counter_client1_reply({Servers, []}).
 
 e_counter_client1_reply({Waiting, Replies})->
     receive
@@ -267,7 +266,7 @@ e_counter_server(_Ops, State) ->
 e_counter_server_loop(Count) ->
     receive
         {incr_counter, From} ->
-            my_bang(From, {incr_counter_reply, self(), Count}),
+            my_bang(From, {incr_counter_reply, my_self(), Count}),
             e_counter_server_loop(Count + 1);
         shutdown ->
             Count
@@ -279,3 +278,8 @@ my_bang(Rcpt, Msg) ->
     %%                 {fun() -> do_nothing end, []}
     %%                ]).
     Rcpt ! Msg.
+
+my_self() ->
+    %% erlang:self().
+    slf_msgsim_qc:get_self().
+
