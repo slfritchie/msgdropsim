@@ -254,8 +254,8 @@ harvest_client_results(Pids) ->
     [receive
          {Pid, X} ->
              X
-     after 1250 ->
-             exit(hey_timeout_bad)
+     %% after 50*1000 ->
+     %%         exit(hey_timeout_bad)
      end || Pid <- Pids].
 
 set_self(Name) ->
