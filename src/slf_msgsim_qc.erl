@@ -182,46 +182,55 @@ prop_simulate(Module, ModProps) ->
 prop_mc_simulate(Module, ModProps) ->
     {MinClients, MaxClients, MinServers, MaxServers, MinKeys, MaxKeys} =
         get_settings(ModProps),
-    ?FORALL({NumClients, NumServers, NumKeys} = F1,
+    ?FORALL({NumClients, NumServers, NumKeys} = _F1,
             {my_choose(MinClients, MaxClients),
              my_choose(MinServers, MaxServers),
              my_choose(MinKeys, MaxKeys)},
-    ?FORALL({Ops, ClientInits, ServerInits} = F2,
+    ?FORALL({Ops, ClientInits, ServerInits} = _F2,
             {Module:gen_initial_ops(NumClients, NumServers, NumKeys, ModProps),
              Module:gen_client_initial_states(NumClients, ModProps),
              Module:gen_server_initial_states(NumServers, ModProps)},
-    begin
-        [begin catch unlink(whereis(Proc)),
-               catch exit(whereis(Proc), kill)
-         end || Proc <- Module:all_clients() ++ Module:all_servers()],
-        erlang:yield(),
-        ServerPids = [spawn(fun() ->
-                                    register(Svr, self()),
-                                    set_self(Svr),
-                                    Module:e_counter_server(x, St)
-                            end) || {Svr, St, _} <- ServerInits],
-        OpsD0 = orddict:from_list([{Cl,[]} || {Cl,_,_} <- ClientInits]),
-        OpsD1 = lists:foldl(fun({Cl, Op}, Dict) ->
-                                    orddict:append(Cl, Op, Dict)
-                            end, OpsD0, Ops),
-        Parent = self(),
-        ClPids = [spawn(fun() ->
-                                register(Cl, self()),
-                                set_self(Cl),
-                                Ops_c = orddict:fetch(Cl, OpsD1),
-                                V = Module:e_counter_client(Ops_c, St),
-                                Parent ! {self(), V},
-                                exit(normal)
-                        end) || {Cl, St, _} <- ClientInits],
-        ClientResults = harvest_client_results(ClPids),
-        [Svr ! shutdown || Svr <- ServerPids],
-        [begin catch unlink(whereis(Proc)),
-               catch exit(whereis(Proc), kill)
-         end || Proc <- Module:all_clients() ++ Module:all_servers()],
-                Module:verify_mc_property(NumClients, NumServers, ModProps,
-                                          F1, F2, Ops, ClientResults)
-    end
+            prop_mc_simulate2(Module, ModProps, NumClients, NumServers, NumKeys,
+                              Ops, ClientInits, ServerInits)
     )).
+
+prop_mc_simulate2(Module, ModProps, NumClients, NumServers, _NumKeys,
+                  Ops, ClientInits, ServerInits) ->
+    [begin catch unlink(whereis(Proc)),
+           catch exit(whereis(Proc), kill)
+     end || Proc <- Module:all_clients() ++ Module:all_servers()],
+    erlang:yield(),
+    ServerPids = [spawn(fun() ->
+                                register(Svr, self()),
+                                set_self(Svr),
+                                receive {ping, From} -> From ! pong end,
+                                Module:e_counter_server(x, St)
+                        end) || {Svr, St, _} <- ServerInits],
+    [Server ! {ping, self()} || Server <- ServerPids],
+    [receive pong -> pong after 250 -> bummer end  || _Server <- ServerPids],
+    OpsD0 = orddict:from_list([{Cl,[]} || {Cl,_,_} <- ClientInits]),
+    OpsD1 = lists:foldl(fun({Cl, Op}, Dict) ->
+                                orddict:append(Cl, Op, Dict)
+                        end, OpsD0, Ops),
+    Parent = self(),
+    ClPids = [spawn(fun() ->
+                            register(Cl, self()),
+                            set_self(Cl),
+                            receive {ping, From} -> From ! pong end,
+                            Ops_c = orddict:fetch(Cl, OpsD1),
+                            V = Module:e_counter_client(Ops_c, St),
+                            Parent ! {self(), V},
+                            exit(normal)
+                    end) || {Cl, St, _} <- ClientInits],
+    [Client ! {ping, self()} || Client <- ClPids],
+    [receive pong -> pong after 250 -> bummer end  || _Client <- ClPids],
+    ClientResults = harvest_client_results(ClPids),
+    [Svr ! shutdown || Svr <- ServerPids],
+    [begin catch unlink(whereis(Proc)),
+           catch exit(whereis(Proc), kill)
+     end || Proc <- Module:all_clients() ++ Module:all_servers()],
+    Module:verify_mc_property(NumClients, NumServers, ModProps,
+                              x, x, Ops, ClientResults).
 
 get_settings(ModProps) ->
     {proplists:get_value(min_clients, ModProps, 1),

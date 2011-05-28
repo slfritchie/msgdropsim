@@ -114,19 +114,28 @@ verify_property(NumClients, NumServers, _Props, F1, F2, Ops,
                %%   Emitted == lists:sort(Emitted)
        end))))))))))).
 
-verify_mc_property(_NumClients, _NumServers, _ModProps, _F1, _F2,
+verify_mc_property(_NumClients, _NumServers, ModProps, _F1, _F2,
                    Ops, ClientResults) ->
     AllEmitted = lists:flatten(ClientResults),
     EmittedByEach = [Val || {counter, Val} <- ClientResults],
-    ?WHENFAIL(io:format("Ops ~p\nAll Emitted ~p\nBy each ~p\n",
-                        [Ops, AllEmitted, EmittedByEach]),
-              lists:all(fun(X) when is_integer(X) -> true;
-                           (_)                    -> false
-                        end, [Val || {counter, Val} <- AllEmitted]) andalso
-              length(Ops) == length(AllEmitted) andalso
-              [] == [x || EmitList <- EmittedByEach,
-                          EmitList == lists:sort(EmitList),
-                          EmitList == lists:usort(EmitList)]).
+    Check = fun() ->
+                    lists:all(fun(X) when is_integer(X) -> true;
+                                 (_)                    -> false
+                              end, [Val || {counter, Val} <- AllEmitted])
+                        andalso
+                        length(Ops) == length(AllEmitted) andalso
+                        [] == [x || EmitList <- EmittedByEach,
+                                    EmitList == lists:sort(EmitList),
+                                    EmitList == lists:usort(EmitList)]
+            end,
+    case proplists:get_value(no_generator, ModProps, false) of
+        false ->
+            ?WHENFAIL(io:format("Ops ~p\nAll Emitted ~p\nBy each ~p\n",
+                                [Ops, AllEmitted, EmittedByEach]),
+                      Check());
+        true ->
+            Check()
+    end.
 
 %%% Protocol implementation
 
