@@ -80,7 +80,7 @@ verify_property(NumClients, NumServers, _Props, F1, F2, Ops,
                                     Count /= timeout, Cl == Clnt],
                       %% Retrograde counter?
                       L /= lists:usort(L)
-              end,                                 
+              end,
     ClientRetroP = lists:any(F_retro, Clients),
     ?WHENFAIL(
        io:format("Failed:\nF1 = ~p\nF2 = ~p\nEnd2 = ~P\n"
