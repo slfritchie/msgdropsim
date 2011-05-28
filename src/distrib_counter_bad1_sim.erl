@@ -118,17 +118,25 @@ verify_mc_property(_NumClients, _NumServers, ModProps, _F1, _F2,
                    Ops, ClientResults) ->
     AllEmitted = lists:flatten(ClientResults),
     EmittedByEach = [Val || {counter, Val} <- ClientResults],
-    XX = length([x || {counter, timeout} <- AllEmitted]),
-    if XX > 0 -> io:format(user, "~p,", [XX]); true -> ok end,
     Check = fun() ->
-                    lists:all(fun(X) when is_integer(X) -> true;
-                                 (_)                    -> false
-                              end, [Val || {counter, Val} <- AllEmitted])
-                        andalso
-                        length(Ops) == length(AllEmitted) andalso
-                        [] == [x || EmitList <- EmittedByEach,
-                                    EmitList == lists:sort(EmitList),
-                                    EmitList == lists:usort(EmitList)]
+                    %% lists:all(fun(X) when is_integer(X) -> true;
+                    %%              (_)                    -> false
+                    %%           end, [Val || {counter, Val} <- AllEmitted])
+                    %%     andalso
+                    if length(Ops) == length(AllEmitted) ->
+                            ok;
+                       true ->
+                            exit({num_ops, length(Ops), all_emitted, AllEmitted})
+                    end,
+                    case [x || EmitList <- EmittedByEach,
+                               EmitList == lists:sort(EmitList),
+                               EmitList == lists:usort(EmitList)] of
+                        [] ->
+                            ok;
+                        _ ->
+                            exit({emitted_by_each, EmittedByEach})
+                    end,
+                    true
             end,
     case proplists:get_value(no_generator, ModProps, false) of
         false ->

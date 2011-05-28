@@ -229,8 +229,8 @@ prop_mc_simulate2(Module, ModProps, NumClients, NumServers, _NumKeys,
     [begin catch unlink(whereis(Proc)),
            catch exit(whereis(Proc), kill)
      end || Proc <- Module:all_clients() ++ Module:all_servers()],
-    Module:verify_mc_property(NumClients, NumServers, ModProps,
-                              x, x, Ops, ClientResults).
+    true = Module:verify_mc_property(NumClients, NumServers, ModProps,
+                                     x, x, Ops, ClientResults).
 
 get_settings(ModProps) ->
     {proplists:get_value(min_clients, ModProps, 1),
@@ -255,7 +255,7 @@ harvest_client_results(Pids) ->
          {Pid, X} ->
              X
      after 1250 ->
-             hey_timeout_bad
+             exit(hey_timeout_bad)
      end || Pid <- Pids].
 
 set_self(Name) ->
