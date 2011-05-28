@@ -280,7 +280,7 @@ e_counter_server_loop(Count) ->
         shutdown ->
             Count
     end.
-                
+
 my_bang(Rcpt, Msg) ->
     %% mce_erl:choice([
     %%                 {fun() -> Rcpt ! Msg end, []},
