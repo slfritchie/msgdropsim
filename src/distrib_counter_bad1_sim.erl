@@ -118,11 +118,15 @@ verify_mc_property(_NumClients, _NumServers, _ModProps, _F1, _F2,
                    Ops, ClientResults) ->
     AllEmitted = lists:flatten(ClientResults),
     EmittedByEach = [Val || {counter, Val} <- ClientResults],
-    length(Ops) == length(AllEmitted) andalso
-        [] == [x || EmitList <- EmittedByEach,
-                    EmitList == lists:sort(EmitList),
-                    EmitList == lists:usort(EmitList)].
-
+    ?WHENFAIL(io:format("Ops ~p\nAll Emitted ~p\nBy each ~p\n",
+                        [Ops, AllEmitted, EmittedByEach]),
+              lists:all(fun(X) when is_integer(X) -> true;
+                           (_)                    -> false
+                        end, [Val || {counter, Val} <- AllEmitted]) andalso
+              length(Ops) == length(AllEmitted) andalso
+              [] == [x || EmitList <- EmittedByEach,
+                          EmitList == lists:sort(EmitList),
+                          EmitList == lists:usort(EmitList)]).
 
 %%% Protocol implementation
 
@@ -232,7 +236,8 @@ e_counter_client(Ops, State) ->
 e_counter_client1({counter_op, Servers}, _State) ->
     [my_bang(Server, {incr_counter, self()}) ||
         Server <- Servers],
-    e_counter_client1_reply({Servers, []}).
+    ServerPids = [whereis(Server) || Server <- Servers],
+    e_counter_client1_reply({ServerPids, []}).
 
 e_counter_client1_reply({Waiting, Replies})->
     receive
@@ -247,7 +252,7 @@ e_counter_client1_reply({Waiting, Replies})->
             end;
         shutdown ->
             shutdown
-    after 100 ->
+    after 500 ->
             Val = if length(Waiting) >= length(Replies) ->
                           timeout;
                      true ->

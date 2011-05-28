@@ -190,9 +190,20 @@ prop_mc_simulate(Module, ModProps) ->
             {Module:gen_client_initial_states(NumClients, ModProps),
              Module:gen_server_initial_states(NumServers, ModProps)},
     begin
-        ServerPids = [spawn_link(fun() -> Module:e_counter_server(x, St) end) ||
-                         {_, St, _} <- ServerInits],
-        ModProps2 = [{server_pids, ServerPids}|ModProps],
+        [begin catch unlink(whereis(Proc)),
+               catch exit(whereis(Proc), kill)
+         end || Proc <- Module:all_clients() ++ Module:all_servers()],
+        erlang:yield(),
+        ServerPids = [spawn(fun() ->
+                                         register(Svr, self()),
+                                         receive {ping, From} ->
+                                                 From ! pong
+                                         end,
+                                         Module:e_counter_server(x, St)
+                                 end) || {Svr, St, _} <- ServerInits],
+        [Server ! {ping, self()} || Server <- ServerPids],
+        [receive pong -> ok after 100 -> bummer end || _Server <- ServerPids],
+        ModProps2 = ModProps, %% ModProps2 = [{server_pids, ServerPids}|ModProps],
     ?FORALL(Ops,
             Module:gen_initial_ops(NumClients, NumServers, NumKeys, ModProps2),
             begin
@@ -201,7 +212,8 @@ prop_mc_simulate(Module, ModProps) ->
                                             orddict:append(Cl, Op, Dict)
                                     end, OpsD0, Ops),
                 Parent = self(),
-                ClPids = [spawn_link(fun() ->
+                ClPids = [spawn(fun() ->
+                                             register(Cl, self()),
                                              Ops_c = orddict:fetch(Cl, OpsD1),
                                              V = Module:e_counter_client(Ops_c,
                                                                          St),
@@ -212,6 +224,9 @@ prop_mc_simulate(Module, ModProps) ->
                 %% io:format("ClPids = ~p\n", [ClPids]),
                 ClientResults = harvest_client_results(ClPids),
                 [Svr ! shutdown || Svr <- ServerPids],
+        [begin catch unlink(whereis(Proc)),
+               catch exit(whereis(Proc), kill)
+         end || Proc <- Module:all_clients() ++ Module:all_servers()],
                 Module:verify_mc_property(NumClients, NumServers, ModProps,
                                           F1, F2, Ops, ClientResults)
             end
@@ -241,6 +256,6 @@ harvest_client_results(Pids) ->
     [receive
          {Pid, X} ->
              X
-     after 100 ->
+     after 1250 ->
              hey_timeout_bad
      end || Pid <- Pids].
