@@ -263,3 +263,12 @@ set_self(Name) ->
 
 get_self() ->
     erlang:get({?MODULE, self}).
+
+mc_bang(Rcpt, Msg) ->
+    Send = fun() -> Rcpt ! Msg end,
+    Drop = fun() -> mce_erl:probe({drop_msg, mc_self(), Rcpt, Msg}) end,
+    mce_erl:choice([{Send, []}, {Drop, []}]).
+
+mc_self() ->
+    get_self().
+

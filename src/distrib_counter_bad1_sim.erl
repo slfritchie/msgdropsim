@@ -252,7 +252,7 @@ e_counter_client(Ops, State) ->
     [e_counter_client1(Op, State) || Op <- Ops].
 
 e_counter_client1({counter_op, Servers}, _State) ->
-    [my_bang(Server, {incr_counter, my_self()}) ||
+    [mc_bang(Server, {incr_counter, mc_self()}) ||
         Server <- Servers],
     e_counter_client1_reply({Servers, []}).
 
@@ -263,7 +263,7 @@ e_counter_client1_reply({Waiting, Replies})->
             case Waiting -- [Server] of
                 [] ->
                     Val = make_val(Replies2),
-                    {my_self(), {counter, Val}}; % "emit"
+                    {mc_self(), {counter, Val}}; % "emit"
                 Waiting2 ->
                     e_counter_client1_reply({Waiting2, Replies2})
             end;
@@ -275,7 +275,7 @@ e_counter_client1_reply({Waiting, Replies})->
                      true ->
                           make_val(Replies)
                   end,
-            {my_self(), {counter, Val}}         % "emit"
+            {mc_self(), {counter, Val}}         % "emit"
     end.
 
 e_counter_server(_Ops, State) ->
@@ -284,18 +284,15 @@ e_counter_server(_Ops, State) ->
 e_counter_server_loop(Count) ->
     receive
         {incr_counter, From} ->
-            my_bang(From, {incr_counter_reply, my_self(), Count}),
+            mc_bang(From, {incr_counter_reply, mc_self(), Count}),
             e_counter_server_loop(Count + 1);
         shutdown ->
             Count
     end.
 
-my_bang(Rcpt, Msg) ->
-    Send = fun() -> Rcpt ! Msg end,
-    Drop = fun() -> mce_erl:probe({drop_msg, my_self(), Rcpt, Msg}) end,
-    mce_erl:choice([{Send, []}, {Drop, []}]).
+mc_bang(Rcpt, Msg) ->
+    slf_msgsim_qc:mc_bang(Rcpt, Msg).
 
-my_self() ->
-    %% erlang:self().
-    slf_msgsim_qc:get_self().
+mc_self() ->
+    slf_msgsim_qc:mc_self().
 
