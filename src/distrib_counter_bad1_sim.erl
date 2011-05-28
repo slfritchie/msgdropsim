@@ -291,11 +291,9 @@ e_counter_server_loop(Count) ->
     end.
 
 my_bang(Rcpt, Msg) ->
-    mce_erl:choice([
-                    {fun() -> Rcpt ! Msg end, []},
-                    {fun() -> do_nothing end, []}
-                   ]).
-    %% Rcpt ! Msg.
+    Send = fun() -> Rcpt ! Msg end,
+    Drop = fun() -> mce_erl:probe({drop_msg, my_self(), Rcpt, Msg}) end,
+    mce_erl:choice([{Send, []}, {Drop, []}]).
 
 my_self() ->
     %% erlang:self().
