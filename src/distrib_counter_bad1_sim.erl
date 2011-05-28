@@ -118,11 +118,6 @@ verify_mc_property(_NumClients, _NumServers, _ModProps, _F1, _F2,
                    Ops, ClientResults) ->
     AllEmitted = lists:flatten(ClientResults),
     EmittedByEach = [Val || {counter, Val} <- ClientResults],
-    if length(Ops) == 10, length(ClientResults) > 3 ->
-            io:format("\n~p\n", [ClientResults]);
-       true ->
-            ok 
-    end,
     length(Ops) == length(AllEmitted) andalso
         [] == [x || EmitList <- EmittedByEach,
                     EmitList == lists:sort(EmitList),
