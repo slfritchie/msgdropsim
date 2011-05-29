@@ -1003,7 +1003,7 @@ e_client_notif_resp_waiting(C = #c{num_servers = NumServers, watchers = Ws}) ->
             if Ws == [] ->
                     e_client_init(#c{});
                true ->
-                    cl_send_notifications(C),
+                    e_cl_send_notifications(C),
                     e_client_notif_resp_waiting(C)
             end
     end.
@@ -1181,7 +1181,9 @@ e_server_asked(S = #s{cookie = Cookie, val = Z1, watchers = Ws,
         {watch_cancel_req, _From, _ClOp} = Msg ->
             e_server_asked(e_sv_watch_cancel(Msg, S));
         {watch_notify_maybe_resp, _From, _ClOp, ok} ->
-            e_server_asked(S)
+            e_server_asked(S);
+        shutdown ->
+            S
     after 250 ->
             e_server_unasked(S#s{asker = undefined,
                                  cookie = undefined})
