@@ -915,8 +915,7 @@ e_cl_p1_next_step(C = #c{num_responses = NumResps}) ->
             if NumOks >= Q ->
                     e_cl_p1_send_do(C);
                true ->
-                    mc_probe({ph1_quorum_failure,
-                                   mc_self(), num_oks, NumOks}),
+                    mc_probe({ph1_quorum_failure, mc_self(), num_oks, NumOks}),
                     if NumOks == 0 ->
                             e_client_init(#c{});
                        true ->
