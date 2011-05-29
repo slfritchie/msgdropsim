@@ -185,13 +185,73 @@ arrest me.)
     `eqc:numtests()` and/or/both `eqc_gen:resize(N, YourProperty)`
     where `N` is a large number on the range of 50-100.
 
+Using the simulators with McErlang
+----------------------------------
+
+The current work on
+[McErlang](https://babel.ls.fi.upm.es/trac/McErlang/) integration is
+... well, barely recognizable as "integration".  But it's trying to
+get there, slowly.
+
+Short answer: look at the commit log entries starting on May 28,
+2011.  There are cut-and-paste'able examples and a fair amount of
+commentary there.
+
+One major complication is the simulator's support for Erlang's
+"selective receive" feature.  Take this bit of code from
+`distrib_counter_2phase_sim.erl`:
+
+    client_ph1_waiting({ph1_ask_ok, ClOp, _Server, _Cookie, _Count} = Msg,
+                       C = #c{clop = ClOp, num_responses = Resps, ph1_oks = Oks}) ->
+        cl_p1_next_step(false, C#c{num_responses = Resps + 1,
+                                   ph1_oks       = [Msg|Oks]});
+    client_ph1_waiting({ph1_ask_sorry, ClOp, _Server, _LuckyClient} = Msg,
+                       C = #c{clop = ClOp,
+                              num_responses = Resps, ph1_sorrys = Sorrys}) ->
+        cl_p1_next_step(false, C#c{num_responses = Resps + 1,
+                                   ph1_sorrys    = [Msg|Sorrys]});
+    client_ph1_waiting(timeout, C) ->
+        cl_p1_next_step(true, C).
+
+If the simulated process receives a `{unexpected, ...}` message
+while in the `client_ph1_waiting` state, that message will be
+ignored.  Why?  "Selective receive" will only pull a message out of a
+mailbox when there is a sufficiently general pattern to match it.  In
+the code for `client_ph1_waiting()` above, there are exactly three
+possible messages that can be processed while in that state:
+
+* `{ph1_ask_ok, ClOp, _, _, _}` where ClOp is exactly equal to the
+  second argument's `C#c.clop` value.  (Remember, the underscore `_`
+  means "don't care".)
+* `{ph1_ask_sorry, ClOp, _, _}` where ClOp is exactly equal to the
+  second argument's `C#c.clop` value.
+* `timeout`
+
+It may be possible to perform an automatic (or semi-automatic)
+transformation of this code into something like:
+
+    client_ph1_waiting(C) ->
+        C = #c{clop = ClOp, num_responses = Resps, ph1_oks = Oks, ph1_sorrys = Sorrys},
+        receive
+            {ph1_ask_ok, ClOp, _Server, _Cookie, _Count} = Msg ->
+                cl_p1_next_step(false, C#c{num_responses = Resps + 1,
+                                           ph1_oks       = [Msg|Oks]});
+            {ph1_ask_sorry, ClOp, _Server, _LuckyClient} = Msg ->
+                cl_p1_next_step(false, C#c{num_responses = Resps + 1,
+                                           ph1_sorrys    = [Msg|Sorrys]})
+        after ?SomeTimeOut ->
+                cl_p1_next_step(true, C)
+        end.
+
 Future work
 -----------
 
+* See if it's feasible to use one of the following to convert
+  slfmsgsim-style code into straight Erlang code:
+  * parse transform
+  * The OTP distribution's `syntax_tools` tools.
 * Add support for simulated Erlang monitors, Erlang's method for
   informing processes that messages may have been dropped.
-* Investigate integration of message dropping (and perhaps also
-  message delaying?) with McErlang.
 * There's gotta be some cool opportunities for visualization and
   animation in here....
 
