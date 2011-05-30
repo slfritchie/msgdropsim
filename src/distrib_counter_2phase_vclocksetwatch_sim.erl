@@ -836,10 +836,8 @@ all_servers() ->
 %%% Brute-force attempt to McErlang'ify.....
 
 startup(client) ->
-    io:format(user, "c", []),
     fun e_client/2;
 startup(server) ->
-    io:format(user, "s", []),
     fun e_server/2.
 
 e_client(Ops, State) ->
@@ -847,6 +845,7 @@ e_client(Ops, State) ->
     e_client_init(State).
 
 e_client_init(C) ->
+    put(short_circuit, 0),
     receive
         {counter_op, Servers} ->
             %% The clop/ClOp is short for "Client Operation".  It's used in
@@ -937,6 +936,7 @@ e_cl_p1_next_step(C = #c{num_responses = NumResps}) ->
     end.
 
 e_cl_p1_send_cancels(C = #c{clop = ClOp, ph1_oks = Oks}) ->
+    put(short_circuit, get(short_circuit) + 1),
     [mc_bang(Server, {ph1_cancel, mc_self(), ClOp, Cookie}) ||
         {ph1_ask_ok, _ClOp, Server, Cookie, _Z} <- Oks],
     e_client_ph1_cancelling(C).
@@ -1043,6 +1043,7 @@ e_cl_watch_send_cancels(C = #c{clop = ClOp, ph1_oks = Oks}) ->
     if length(Oks) == 0 ->
             e_client_init(C);
        true ->
+            put(short_circuit, get(short_circuit) + 1),
             Self = mc_self(),
             [mc_bang(Server, {watch_cancel_req, Self, ClOp}) ||
                 {watch_setup_resp, _ClOp, Server, ok} <- Oks],
@@ -1129,6 +1130,7 @@ e_server(_Ops, State) ->
     e_server_unasked(State).
 
 e_server_unasked(S = #s{val = Z1}) ->
+    put(short_circuit, 0),
     receive
         {ph1_ask, From, ClOp} when S#s.cookie == undefined ->
             S2 = e_send_ask_ok(From, ClOp, S),
@@ -1291,6 +1293,7 @@ e_sv_watch_cancel({watch_cancel_req, From, ClOp}, S = #s{watchers = Ws}) ->
     S#s{watchers = Ws -- [{From, ClOp}]}.
 
 e_sv_send_maybe_notifications(S = #s{watchers = Ws, val = Z}) ->
+    put(short_circuit, get(short_circuit) + 1),
      [mc_bang(Clnt, {watch_notify_maybe_req, ClOp, mc_self(), Z}) ||
          {Clnt, ClOp} <- Ws],
     S.
@@ -1302,8 +1305,21 @@ e_unconditional_utrace(#obj{contents = Z0C}, #obj{contents = Z1C}, Z) ->
           end,
     mc_probe({unconditional_set, Val}).
 
+-define(CONST, 1).
+
 mc_bang(Rcpt, Msg) ->
-    slf_msgsim_qc:mc_bang(Rcpt, Msg).
+    case get(short_circuit) of
+        N when N < ?CONST ->
+            slf_msgsim_qc:mc_bang(Rcpt, Msg);
+        N when N == ?CONST ->
+            %% From now on, we can't drop messages.
+            put(short_circuit, N + 1), % avoid multiple probes
+            mc_probe({short_circuit_fired, mc_self(), N}),
+            Rcpt ! Msg;
+        _ ->
+            Rcpt ! Msg
+    end,
+    Msg.
     %% Rcpt ! Msg.
 
 mc_self() ->

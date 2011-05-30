@@ -212,6 +212,7 @@ prop_mc_simulate2(Module, ModProps, NumClients, NumServers, _NumKeys,
     ClPids = [start_mc_proc(Parent, Module, client, Name,
                                 orddict:fetch(Name, OpsD), InitState) ||
                      {Name, InitState, _} <- ClientInits],
+    mce_erl:probe(end_sequential),
     %% Well, client and server processes are started symmetrically, but
     %% they end asymmetrically: client results are harvested before a
     %% 'shutdown' message, but server results are harvested after.
@@ -221,8 +222,10 @@ prop_mc_simulate2(Module, ModProps, NumClients, NumServers, _NumKeys,
     [begin catch unlink(whereis(Proc)),
            catch exit(whereis(Proc), kill)
      end || Proc <- Module:all_clients() ++ Module:all_servers()],
+    io:format(user, "v", []),
     true = Module:verify_mc_property(NumClients, NumServers, ModProps,
-                                     x, x, Ops, ClientResults).
+                                     x, x, Ops, ClientResults),
+    io:format(user, "V", []).
 
 get_settings(ModProps) ->
     {proplists:get_value(min_clients, ModProps, 1),
@@ -245,6 +248,7 @@ my_list_elements(L) ->
 harvest_client_results(Pids) ->
     [receive
          {Pid, X} ->
+             io:format(user, "x", []),
              X
      %% after 50*1000 ->
      %%         exit(hey_timeout_bad)
@@ -270,8 +274,15 @@ start_mc_proc(Parent, Module, Type, Name, Ops, InitState) ->
                         set_self(Name),
                         receive {ping, From} -> From ! pong end,
                         StartFun = Module:startup(Type),
-                        V = StartFun(Ops, InitState),
-                        Parent ! {self(), V},
+                        try
+                            exit(V = StartFun(Ops, InitState)),
+                            io:format(user, "<", []),
+                            Parent ! {self(), V},
+                            io:format(user, ">", [])
+                        catch X:Y ->
+                                io:format(user, "~p ~p, ", [X,Y]),
+                                Parent ! {self, bad}
+                        end,
                         exit(normal)
                 end),
     Pid ! {ping, self()},
