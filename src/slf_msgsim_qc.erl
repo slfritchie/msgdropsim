@@ -200,34 +200,24 @@ prop_mc_simulate2(Module, ModProps, NumClients, NumServers, _NumKeys,
            catch exit(whereis(Proc), kill)
      end || Proc <- Module:all_clients() ++ Module:all_servers()],
     erlang:yield(),
-    ServerPids = [spawn(fun() ->
-                                register(Svr, self()),
-                                set_self(Svr),
-                                receive {ping, From} -> From ! pong end,
-                                StartFun = Module:startup(server),
-                                StartFun(x, St)
-                        end) || {Svr, St, _} <- ServerInits],
-    [Server ! {ping, self()} || Server <- ServerPids],
-    [receive pong -> pong after 250 -> bummer end  || _Server <- ServerPids],
-    OpsD0 = orddict:from_list([{Cl,[]} || {Cl,_,_} <- ClientInits]),
-    OpsD1 = lists:foldl(fun({Cl, Op}, Dict) ->
-                                orddict:append(Cl, Op, Dict)
-                        end, OpsD0, Ops),
     Parent = self(),
-    ClPids = [spawn(fun() ->
-                            register(Cl, self()),
-                            set_self(Cl),
-                            receive {ping, From} -> From ! pong end,
-                            Ops_c = orddict:fetch(Cl, OpsD1),
-                            StartFun = Module:startup(client),
-                            V = StartFun(Ops_c, St),
-                            Parent ! {self(), V},
-                            exit(normal)
-                    end) || {Cl, St, _} <- ClientInits],
-    [Client ! {ping, self()} || Client <- ClPids],
-    [receive pong -> pong after 250 -> bummer end  || _Client <- ClPids],
+    OpsD0 = orddict:from_list([{Cl,[]} ||
+                                  {Cl,_,_} <- ClientInits ++ ServerInits]),
+    OpsD = lists:foldl(fun({Cl, Op}, Dict) ->
+                               orddict:append(Cl, Op, Dict)
+                       end, OpsD0, Ops),
+    ServerPids = [start_mc_proc(Parent, Module, server, Name,
+                                orddict:fetch(Name, OpsD), InitState) ||
+                     {Name, InitState, _} <- ServerInits],
+    ClPids = [start_mc_proc(Parent, Module, client, Name,
+                                orddict:fetch(Name, OpsD), InitState) ||
+                     {Name, InitState, _} <- ClientInits],
+    %% Well, client and server processes are started symmetrically, but
+    %% they end asymmetrically: client results are harvested before a
+    %% 'shutdown' message, but server results are harvested after.
     ClientResults = harvest_client_results(ClPids),
-    [Svr ! shutdown || Svr <- ServerPids],
+    [catch (Svr ! shutdown) || Svr <- ServerPids ++ ClPids],
+    _ServerResults = harvest_client_results(ServerPids),
     [begin catch unlink(whereis(Proc)),
            catch exit(whereis(Proc), kill)
      end || Proc <- Module:all_clients() ++ Module:all_servers()],
@@ -273,4 +263,18 @@ mc_bang(Rcpt, Msg) ->
 
 mc_self() ->
     get_self().
+
+start_mc_proc(Parent, Module, Type, Name, Ops, InitState) ->
+    Pid = spawn(fun() ->
+                        register(Name, self()),
+                        set_self(Name),
+                        receive {ping, From} -> From ! pong end,
+                        StartFun = Module:startup(Type),
+                        V = StartFun(Ops, InitState),
+                        Parent ! {self(), V},
+                        exit(normal)
+                end),
+    Pid ! {ping, self()},
+    receive pong -> pong after 250 -> exit({failed_pingpong, Name}) end,
+    Pid.
 

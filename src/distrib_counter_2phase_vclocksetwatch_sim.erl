@@ -30,6 +30,9 @@
 
 -compile(export_all).
 
+%% -define(TIMEOUT, 250).
+-define(TIMEOUT, 30*1000).
+
 -include_lib("eqc/include/eqc.hrl").
 
 -record(c, {                                    % client state
@@ -832,6 +835,13 @@ all_servers() ->
 
 %%% Brute-force attempt to McErlang'ify.....
 
+startup(client) ->
+    io:format(user, "c", []),
+    fun e_client/2;
+startup(server) ->
+    io:format(user, "s", []),
+    fun e_server/2.
+
 e_client(Ops, State) ->
     [mc_bang(mc_self(), Op) || Op <- Ops],
     e_client_init(State).
@@ -890,7 +900,7 @@ e_client_ph1_waiting(C = #c{clop = ClOp, num_responses = Resps,
         {ph1_ask_sorry, ClOp, _Server, _LuckyClient} = Msg ->
             e_cl_p1_next_step(C#c{num_responses = Resps + 1,
                                   ph1_sorrys = [Msg|Sorrys]})
-    after 250 ->
+    after ?TIMEOUT ->
             %% Fake like we got responses from all servers ... plus a few extra.
             e_cl_p1_next_step(C#c{num_responses = 9999999999})
     end.
@@ -904,7 +914,7 @@ e_client_ph1_cancelling(C = #c{clop = ClOp, ph1_oks = Oks}) ->
                true ->
                     e_client_ph1_cancelling(C#c{ph1_oks = NewOks})
             end
-    after 250 ->
+    after ?TIMEOUT ->
             e_cl_p1_send_cancels(C)
     end.
 
@@ -958,7 +968,7 @@ e_client_ph2_waiting(C = #c{clop = ClOp,
         {ph1_ask_ok, ClOp, Server, Cookie, _Z} = Msg ->
             mc_bang(Server, {ph2_do_set, mc_self(), ClOp, Cookie, Z}),
             e_client_ph2_waiting(C#c{ph1_oks = [Msg|Oks]})
-    after 250 ->
+    after ?TIMEOUT ->
             Q = calc_q(C),
             if NumResps >= Q ->
                     mc_probe({counter, C#c.ph2_now, Z, lists:usort(Ws)}),
@@ -998,7 +1008,7 @@ e_client_notif_resp_waiting(C = #c{num_servers = NumServers, watchers = Ws}) ->
             %% Race: this arrived late.  But we need to consume it, otherwise we
             %%       won't get a timeout message when we need one
             e_client_notif_resp_waiting(C)
-    after 250 ->
+    after ?TIMEOUT ->
             if Ws == [] ->
                     e_client_init(#c{});
                true ->
@@ -1024,7 +1034,7 @@ e_client_watch_setup(C = #c{clop = ClOp,
                true ->
                     e_client_watch_setup(NewC)
             end
-    after 250 ->
+    after ?TIMEOUT ->
             mc_probe({watch_setup_timeout, mc_self()}),
             e_cl_watch_send_cancels(C)
     end.
@@ -1061,7 +1071,7 @@ e_client_watch_cancelling(C = #c{clop = ClOp, ph1_oks = Oks}) ->
             mc_probe({late_watch_notify_req, ClOp, Z}),
             mc_bang(Server, {watch_notify_resp, mc_self(), ClOp, ok}),
             e_client_watch_cancelling(C)
-    after 250 ->
+    after ?TIMEOUT ->
             mc_probe({watch_cancelling_timeout, mc_self()}),
             e_cl_watch_send_cancels(C)
     end.
@@ -1085,7 +1095,7 @@ e_client_watch_waiting(C = #c{clop = ClOp,
             Oks = [Msg|Oks0],
             e_client_watch_waiting(C#c{num_responses = NumResps,
                                        ph1_oks = Oks})
-    after 250 ->
+    after ?TIMEOUT ->
             e_client_watch_waiting_2(C)
     end.
 
@@ -1108,7 +1118,7 @@ e_client_watch_waiting_2(C = #c{clop = ClOp,
             Oks = [Msg|Oks0],
             e_client_watch_waiting_2(C#c{num_responses = NumResps,
                                          ph1_oks = Oks})
-    after 250 ->
+    after ?TIMEOUT ->
             mc_probe({watch_timeout, ClOp}),
             e_cl_watch_send_cancels(C)
     end.
@@ -1183,7 +1193,7 @@ e_server_asked(S = #s{cookie = Cookie, val = Z1, watchers = Ws,
             e_server_asked(S);
         shutdown ->
             S
-    after 250 ->
+    after ?TIMEOUT ->
             e_server_unasked(S#s{asker = undefined,
                                  cookie = undefined})
     end.
@@ -1203,7 +1213,7 @@ e_server_change_notif_fromsetter(S = #s{watchers = Ws}) ->
             e_server_change_notif_fromsetter(e_sv_watch_setup(Msg, S));
         {watch_cancel_req, _From, _ClOp} = Msg ->
             e_server_change_notif_fromsetter(e_sv_watch_cancel(Msg, S))
-    after 250 ->
+    after ?TIMEOUT ->
             NewS = e_sv_send_maybe_notifications(S),
             e_server_change_notif_toindividuals(NewS)
     end.
@@ -1232,7 +1242,7 @@ e_server_change_notif_toindividuals(S = #s{watchers = Ws}) ->
             e_server_change_notif_toindividuals(e_sv_watch_setup(Msg, S));
         {watch_cancel_req, _From, _ClOp} = Msg ->
             e_server_change_notif_toindividuals(e_sv_watch_cancel(Msg, S))
-    after 250 ->
+    after ?TIMEOUT ->
             if Ws == [] ->
                     e_server_unasked(S#s{asker = undefined,
                                          cookie = undefined,
@@ -1293,15 +1303,16 @@ e_unconditional_utrace(#obj{contents = Z0C}, #obj{contents = Z1C}, Z) ->
     mc_probe({unconditional_set, Val}).
 
 mc_bang(Rcpt, Msg) ->
-    %% slf_msgsim_qc:mc_bang(Rcpt, Msg).
-    Rcpt ! Msg.
+    slf_msgsim_qc:mc_bang(Rcpt, Msg).
+    %% Rcpt ! Msg.
 
 mc_self() ->
-    %% slf_msgsim_qc:mc_self().
-    erlang:self().
+    slf_msgsim_qc:mc_self().
+    %% erlang:self().
 
 mc_probe(Term) ->
-    mce_erl:probe(Term).
+    %% mce_erl:probe(Term).
+    io:format("Probe: ~p\n", [Term]).
 
 %%% BEGIN From riak_object.erl, also Apache Public License v2 licensed
 %%% Copyright (c) 2007-2010 Basho Technologies, Inc.  All Rights Reserved.

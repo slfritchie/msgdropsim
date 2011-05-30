@@ -266,9 +266,7 @@ e_counter_client1_reply({Waiting, Replies})->
                     {mc_self(), {counter, Val}}; % "emit"
                 Waiting2 ->
                     e_counter_client1_reply({Waiting2, Replies2})
-            end;
-        shutdown ->
-            shutdown
+            end
     after 500 ->
             Val = if length(Waiting) >= length(Replies) ->
                           timeout;
@@ -285,9 +283,14 @@ e_counter_server_loop(Count) ->
     receive
         {incr_counter, From} ->
             mc_bang(From, {incr_counter_reply, mc_self(), Count}),
-            e_counter_server_loop(Count + 1);
-        shutdown ->
-            Count
+            e_counter_server_loop(Count + 1)
+    after 250 ->
+            receive
+                shutdown ->
+                    Count
+            after 0 ->
+                    e_counter_server_loop(Count)
+            end
     end.
 
 mc_bang(Rcpt, Msg) ->
@@ -295,4 +298,3 @@ mc_bang(Rcpt, Msg) ->
 
 mc_self() ->
     slf_msgsim_qc:mc_self().
-
