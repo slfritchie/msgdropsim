@@ -273,21 +273,28 @@ start_mc_proc(Parent, Module, Type, Name, Ops, InitState) ->
                         set_self(Name),
                         receive {ping, From} -> From ! pong end,
                         StartFun = Module:startup(Type),
-                        try
-%% io:format(user, "<", []),
-                            V = StartFun(Ops, InitState),
 %% io:format(user, ">", []),
-                            Parent ! {self(), V}
-                        catch
-                            X:Y ->
-                                io:format(user, "ERROR ~p ~p, ", [X,Y]),
-                                Parent ! {self(), bad}
-                        end,
-                        exit(normal)
+                        V = StartFun(Ops, InitState),
+%% io:format(user, "<", []),
+                        Parent ! {self(), V},
+                        %% catch
+                        %%     X:Y ->
+                        %%         io:format(user, "ERROR ~p ~p at ~p", [X,Y,erlang:get_stacktrace()]),
+                        %%         Parent ! {self(), bad}
+                        %% end,
+                        %% %% %% exit(normal)
+                        eat_everything()
                 end),
     Pid ! {ping, self()},
     receive pong -> pong after 250 -> exit({failed_pingpong, Name}) end,
     Pid.
+
+eat_everything() ->
+    receive X ->
+            distrib_counter_2phase_vclocksetwatch_sim:mc_probe(
+              {eat_everything, self(), X}),
+            eat_everything()
+    end.
 
 harvest_client_results(Pids) ->
     [begin

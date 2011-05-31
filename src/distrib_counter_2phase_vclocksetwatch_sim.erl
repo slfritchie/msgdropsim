@@ -858,12 +858,12 @@ startup(server) ->
     fun e_server/2.
 
 e_client(Ops, State) ->
+    mc_put(short_circuit, 0),
     [mc_bang(mc_self(), Op) || Op <- Ops],
     mc_self() ! stop_now_kludge,
     e_client_init(State).
 
 e_client_init(C) ->
-    mc_put(short_circuit, 0),
     receive
         {counter_op, Servers} ->
             %% The clop/ClOp is short for "Client Operation".  It's used in
@@ -975,7 +975,7 @@ e_client_ph2_waiting(C = #c{clop = ClOp,
                     e_client_ph2_waiting(C#c{num_responses = NumResps + 1,
                                              watchers = NewWatchers});
                true ->
-                    io:format(user, "\nDELME ~w ", [{counter, C#c.ph2_now, Z, NewWatchers}]),
+                    %% io:format(user, "\nDELME ~w ", [{counter, C#c.ph2_now, Z, NewWatchers}]),
                     mc_probe({counter, C#c.ph2_now, Z, NewWatchers}),
                     if NewWatchers == [] ->
                             e_client_init(#c{});
@@ -1003,7 +1003,7 @@ e_client_ph2_waiting(C = #c{clop = ClOp,
     after ?TIMEOUT ->
             Q = calc_q(C),
             if NumResps >= Q ->
-                    io:format(user, "\nDELME ~w ", [{counter, C#c.ph2_now, Z, lists:usort(Ws)}]),
+                    %% io:format(user, "\nDELME ~w ", [{counter, C#c.ph2_now, Z, lists:usort(Ws)}]),
                     mc_probe({counter, C#c.ph2_now, Z, lists:usort(Ws)}),
                     e_cl_send_notifications(C),
                     e_client_notif_resp_waiting(C);
@@ -1166,10 +1166,10 @@ e_client_watch_waiting_2(C = #c{clop = ClOp,
 %%% Server counter-related states
 
 e_server(_Ops, State) ->
+    mc_put(short_circuit, 0),
     e_server_unasked(State).
 
 e_server_unasked(S = #s{val = Z1}) ->
-    mc_put(short_circuit, 0),
     receive
         {ph1_ask, From, ClOp} when S#s.cookie == undefined ->
             S2 = e_send_ask_ok(From, ClOp, S),
@@ -1255,7 +1255,7 @@ e_server_change_notif_fromsetter(S = #s{watchers = Ws}) ->
         {watch_cancel_req, _From, _ClOp} = Msg ->
             e_server_change_notif_fromsetter(e_sv_watch_cancel(Msg, S))
     after ?TIMEOUT ->
-            io:format(user, "ms=~p,", [length(S#s.watchers)]),
+            %% io:format(user, "ms=~p,", [length(S#s.watchers)]),
             mc_probe({slf, ?LINE, S#s.watchers}),
             e_sv_send_maybe_notifications(S)
     end.
@@ -1285,7 +1285,7 @@ e_server_change_notif_toindividuals(S = #s{watchers = Ws}) ->
         {watch_cancel_req, _From, _ClOp} = Msg ->
             e_server_change_notif_toindividuals(e_sv_watch_cancel(Msg, S))
     after ?TIMEOUT ->
-            io:format(user, "ms=~p,", [length(S#s.watchers)]),
+            %% io:format(user, "ms=~p,", [length(S#s.watchers)]),
             mc_probe({slf, ?LINE, S#s.watchers}),
             mc_put(short_circuit, mc_get(short_circuit) + 1),
             e_sv_send_maybe_notifications(S)
