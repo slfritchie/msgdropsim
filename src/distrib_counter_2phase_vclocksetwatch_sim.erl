@@ -1116,7 +1116,7 @@ e_client_watch_waiting(C = #c{clop = ClOp,
                               num_responses = NumResps0, ph1_oks = Oks0}) ->
     receive
         {watch_notify_req, ClOp, From, Z} ->
-            io:format(user, "DELME ~w|", [{watch_notify, ClOp, Z}]),
+            %% io:format(user, "DELME ~w|", [{watch_notify, ClOp, Z}]),
             mc_probe({watch_notify, ClOp, Z}),
             mc_bang(From, {watch_notify_resp, mc_self(), ClOp, ok}),
             e_client_init(#c{});
@@ -1124,7 +1124,7 @@ e_client_watch_waiting(C = #c{clop = ClOp,
         %%       (because a quorum of maybes change =?= definite change?)
         %%       or keep things as they are: a maybe is a maybe
         {watch_notify_maybe_req, ClOp, From, Z} ->
-            io:format(user, "DELME ~w|", [{watch_notify_maybe, ClOp, Z}]),
+            %% io:format(user, "DELME ~w|", [{watch_notify_maybe, ClOp, Z}]),
             mc_probe({watch_notify_maybe, ClOp, Z}),
             mc_bang(From, {watch_notify_maybe_resp, mc_self(), ClOp, ok}),
             e_client_init(#c{});
@@ -1141,7 +1141,7 @@ e_client_watch_waiting_2(C = #c{clop = ClOp,
                                 num_responses = NumResps0, ph1_oks = Oks0}) ->
     receive
         {watch_notify_req, ClOp, From, Z} ->
-            io:format(user, "DELME ~w|", [{watch_notify, ClOp, Z}]),
+            %% io:format(user, "DELME ~w|", [{watch_notify, ClOp, Z}]),
             mc_probe({watch_notify, ClOp, Z}),
             mc_bang(From, {watch_notify_resp, mc_self(), ClOp, ok}),
             e_client_init(#c{});
@@ -1149,7 +1149,7 @@ e_client_watch_waiting_2(C = #c{clop = ClOp,
         %%       (because a quorum of maybes change =?= definite change?)
         %%       or keep things as they are: a maybe is a maybe
         {watch_notify_maybe_req, ClOp, From, Z} ->
-            io:format(user, "DELME ~w|", [{watch_notify_maybe, ClOp, Z}]),
+            %% io:format(user, "DELME ~w|", [{watch_notify_maybe, ClOp, Z}]),
             mc_probe({watch_notify_maybe, ClOp, Z}),
             mc_bang(From, {watch_notify_maybe_resp, mc_self(), ClOp, ok}),
             e_client_init(#c{});
