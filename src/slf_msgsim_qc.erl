@@ -216,23 +216,12 @@ prop_mc_simulate2(Module, ModProps, NumClients, NumServers, _NumKeys,
     %% TODO: Figure out how to use mce_app:blah_then_verify()
     %% distrib_counter_2phase_vclocksetwatch_sim:mc_probe(end_sequential),
 
-    %% Well, client and server processes are started symmetrically, but
-    %% they end asymmetrically: client results are harvested before a
-    %% 'shutdown' message, but server results are harvested after.
-%% io:format(user, "LINE ~p\n", [?LINE]),
-    ClientResults = harvest_client_results(ClPids),
-%% io:format(user, "LINE ~p\n", [?LINE]),
     [catch (Svr ! shutdown) || Svr <- ServerPids ++ ClPids],
-%% io:format(user, "LINE ~p\n", [?LINE]),
-%%     _ServerResults = harvest_client_results(ServerPids),
-%% io:format(user, "LINE ~p\n", [?LINE]),
     [begin catch unlink(whereis(Proc)),
            catch exit(whereis(Proc), kill)
      end || Proc <- Module:all_clients() ++ Module:all_servers()],
-    %% io:format(user, "v", []),
     true = Module:verify_mc_property(NumClients, NumServers, ModProps,
-                                     x, x, Ops, ClientResults),
-    %% io:format(user, "V", []).
+                                     x, x, Ops, [there_are_no_client_results]),
     ok.
 
 get_settings(ModProps) ->
@@ -273,16 +262,10 @@ start_mc_proc(Parent, Module, Type, Name, Ops, InitState) ->
                         set_self(Name),
                         receive {ping, From} -> From ! pong end,
                         StartFun = Module:startup(Type),
-%% io:format(user, ">", []),
                         V = StartFun(Ops, InitState),
-%% io:format(user, "<", []),
                         Parent ! {self(), V},
-                        %% catch
-                        %%     X:Y ->
-                        %%         io:format(user, "ERROR ~p ~p at ~p", [X,Y,erlang:get_stacktrace()]),
-                        %%         Parent ! {self(), bad}
-                        %% end,
-                        %% %% %% exit(normal)
+                        distrib_counter_2phase_vclocksetwatch_sim:mc_probe(
+                          {process_done, mc_self(), V}),
                         eat_everything()
                 end),
     Pid ! {ping, self()},
@@ -292,20 +275,9 @@ start_mc_proc(Parent, Module, Type, Name, Ops, InitState) ->
 eat_everything() ->
     receive X ->
             distrib_counter_2phase_vclocksetwatch_sim:mc_probe(
+              {eat_everything, mc_self(), X}),
+            distrib_counter_2phase_vclocksetwatch_sim:mc_probe(
               {eat_everything, self(), X}),
             eat_everything()
     end.
-
-harvest_client_results(Pids) ->
-    [begin
-         %% io:format(user, "harvest ~p: ", [Pid]),
-         receive
-             {Pid, X} ->
-                 %% io:format(user, "~p|", [X]),
-                 X
-                 %% after 50*1000 ->
-                 %%         io:format(user, "~p|", [hey_timeout_bad]),
-                 %%         exit(hey_timeout_bad)
-         end
-     end || Pid <- Pids].
 

@@ -1346,7 +1346,7 @@ e_unconditional_utrace(#obj{contents = Z0C}, #obj{contents = Z1C}, Z) ->
           end,
     mc_probe({unconditional_set, Val}).
 
--define(CONST, 4).
+-define(CONST, 3).
 
 mc_bang(Rcpt, Msg) ->
     case mc_get(short_circuit) of
