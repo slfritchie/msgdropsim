@@ -310,7 +310,7 @@ verify_property(NumClients, NumServers, _Props, F1, F2, Ops,
 
 verify_mc_property(NumClients, _NumServers, ModProps, _F1, _F2,
                    Ops, ClientResults) ->
-    io:format(user, "v", []),
+    %% io:format(user, "v", []),
     true. %% SLF_TODO_fixme_vacuously_true.
 
 %%% Protocol implementation
@@ -851,7 +851,7 @@ e_client(Ops, State) ->
     e_client_init(State).
 
 e_client_init(C) ->
-    put(short_circuit, 0),
+    mc_put(short_circuit, 0),
     receive
         {counter_op, Servers} ->
             %% The clop/ClOp is short for "Client Operation".  It's used in
@@ -944,7 +944,7 @@ e_cl_p1_next_step(C = #c{num_responses = NumResps}) ->
     end.
 
 e_cl_p1_send_cancels(C = #c{clop = ClOp, ph1_oks = Oks}) ->
-    put(short_circuit, get(short_circuit) + 1),
+    mc_put(short_circuit, mc_get(short_circuit) + 1),
     [mc_bang(Server, {ph1_cancel, mc_self(), ClOp, Cookie}) ||
         {ph1_ask_ok, _ClOp, Server, Cookie, _Z} <- Oks],
     e_client_ph1_cancelling(C).
@@ -963,7 +963,7 @@ e_client_ph2_waiting(C = #c{clop = ClOp,
                     e_client_ph2_waiting(C#c{num_responses = NumResps + 1,
                                              watchers = NewWatchers});
                true ->
-                    io:format(user, "DELME ~p|", [{counter, C#c.ph2_now, Z, NewWatchers}]),
+                    io:format(user, "\nDELME ~w ", [{counter, C#c.ph2_now, Z, NewWatchers}]),
                     mc_probe({counter, C#c.ph2_now, Z, NewWatchers}),
                     if NewWatchers == [] ->
                             e_client_init(#c{});
@@ -980,7 +980,7 @@ e_client_ph2_waiting(C = #c{clop = ClOp,
     after ?TIMEOUT ->
             Q = calc_q(C),
             if NumResps >= Q ->
-                    io:format(user, "DELME ~p|", [{counter, C#c.ph2_now, Z, lists:usort(Ws)}]),
+                    io:format(user, "\nDELME ~w ", [{counter, C#c.ph2_now, Z, lists:usort(Ws)}]),
                     mc_probe({counter, C#c.ph2_now, Z, lists:usort(Ws)}),
                     e_cl_send_notifications(C),
                     e_client_notif_resp_waiting(C);
@@ -1022,6 +1022,7 @@ e_client_notif_resp_waiting(C = #c{num_servers = NumServers, watchers = Ws}) ->
             if Ws == [] ->
                     e_client_init(#c{});
                true ->
+                    mc_put(short_circuit, mc_get(short_circuit) + 1),
                     e_cl_send_notifications(C),
                     e_client_notif_resp_waiting(C)
             end
@@ -1053,7 +1054,7 @@ e_cl_watch_send_cancels(C = #c{clop = ClOp, ph1_oks = Oks}) ->
     if length(Oks) == 0 ->
             e_client_init(C);
        true ->
-            put(short_circuit, get(short_circuit) + 1),
+            mc_put(short_circuit, mc_get(short_circuit) + 1),
             Self = mc_self(),
             [mc_bang(Server, {watch_cancel_req, Self, ClOp}) ||
                 {watch_setup_resp, _ClOp, Server, ok} <- Oks],
@@ -1083,6 +1084,7 @@ e_client_watch_cancelling(C = #c{clop = ClOp, ph1_oks = Oks}) ->
             mc_bang(Server, {watch_notify_resp, mc_self(), ClOp, ok}),
             e_client_watch_cancelling(C)
     after ?TIMEOUT ->
+            mc_put(short_circuit, mc_get(short_circuit) + 1),
             mc_probe({watch_cancelling_timeout, mc_self()}),
             e_cl_watch_send_cancels(C)
     end.
@@ -1091,7 +1093,7 @@ e_client_watch_waiting(C = #c{clop = ClOp,
                               num_responses = NumResps0, ph1_oks = Oks0}) ->
     receive
         {watch_notify_req, ClOp, From, Z} ->
-            io:format(user, "DELME ~p|", [{watch_notify, ClOp, Z}]),
+            io:format(user, "DELME ~w|", [{watch_notify, ClOp, Z}]),
             mc_probe({watch_notify, ClOp, Z}),
             mc_bang(From, {watch_notify_resp, mc_self(), ClOp, ok}),
             e_client_init(#c{});
@@ -1099,7 +1101,7 @@ e_client_watch_waiting(C = #c{clop = ClOp,
         %%       (because a quorum of maybes change =?= definite change?)
         %%       or keep things as they are: a maybe is a maybe
         {watch_notify_maybe_req, ClOp, From, Z} ->
-            io:format(user, "DELME ~p|", [{watch_notify_maybe, ClOp, Z}]),
+            io:format(user, "DELME ~w|", [{watch_notify_maybe, ClOp, Z}]),
             mc_probe({watch_notify_maybe, ClOp, Z}),
             mc_bang(From, {watch_notify_maybe_resp, mc_self(), ClOp, ok}),
             e_client_init(#c{});
@@ -1116,7 +1118,7 @@ e_client_watch_waiting_2(C = #c{clop = ClOp,
                                 num_responses = NumResps0, ph1_oks = Oks0}) ->
     receive
         {watch_notify_req, ClOp, From, Z} ->
-            io:format(user, "DELME ~p|", [{watch_notify, ClOp, Z}]),
+            io:format(user, "DELME ~w|", [{watch_notify, ClOp, Z}]),
             mc_probe({watch_notify, ClOp, Z}),
             mc_bang(From, {watch_notify_resp, mc_self(), ClOp, ok}),
             e_client_init(#c{});
@@ -1124,7 +1126,7 @@ e_client_watch_waiting_2(C = #c{clop = ClOp,
         %%       (because a quorum of maybes change =?= definite change?)
         %%       or keep things as they are: a maybe is a maybe
         {watch_notify_maybe_req, ClOp, From, Z} ->
-            io:format(user, "DELME ~p|", [{watch_notify_maybe, ClOp, Z}]),
+            io:format(user, "DELME ~w|", [{watch_notify_maybe, ClOp, Z}]),
             mc_probe({watch_notify_maybe, ClOp, Z}),
             mc_bang(From, {watch_notify_maybe_resp, mc_self(), ClOp, ok}),
             e_client_init(#c{});
@@ -1144,7 +1146,7 @@ e_server(_Ops, State) ->
     e_server_unasked(State).
 
 e_server_unasked(S = #s{val = Z1}) ->
-    put(short_circuit, 0),
+    mc_put(short_circuit, 0),
     receive
         {ph1_ask, From, ClOp} when S#s.cookie == undefined ->
             S2 = e_send_ask_ok(From, ClOp, S),
@@ -1230,8 +1232,9 @@ e_server_change_notif_fromsetter(S = #s{watchers = Ws}) ->
         {watch_cancel_req, _From, _ClOp} = Msg ->
             e_server_change_notif_fromsetter(e_sv_watch_cancel(Msg, S))
     after ?TIMEOUT ->
-            NewS = e_sv_send_maybe_notifications(S),
-            e_server_change_notif_toindividuals(NewS)
+            io:format(user, "ms=~p,", [length(S#s.watchers)]),
+            mc_probe({slf, ?LINE, S#s.watchers}),
+            e_sv_send_maybe_notifications(S)
     end.
 
 e_server_change_notif_toindividuals(S = #s{watchers = Ws}) ->
@@ -1259,14 +1262,9 @@ e_server_change_notif_toindividuals(S = #s{watchers = Ws}) ->
         {watch_cancel_req, _From, _ClOp} = Msg ->
             e_server_change_notif_toindividuals(e_sv_watch_cancel(Msg, S))
     after ?TIMEOUT ->
-            if Ws == [] ->
-                    e_server_unasked(S#s{asker = undefined,
-                                         cookie = undefined,
-                                         watchers = []});
-               true ->
-                    NewS = e_sv_send_maybe_notifications(S),
-                    e_server_change_notif_toindividuals(NewS)
-            end
+            io:format(user, "ms=~p,", [length(S#s.watchers)]),
+            mc_probe({slf, ?LINE, S#s.watchers}),
+            e_sv_send_maybe_notifications(S)
     end.
 
 e_send_ask_ok(From, ClOp, S = #s{val = Z}) ->
@@ -1307,10 +1305,16 @@ e_sv_watch_cancel({watch_cancel_req, From, ClOp}, S = #s{watchers = Ws}) ->
     S#s{watchers = Ws -- [{From, ClOp}]}.
 
 e_sv_send_maybe_notifications(S = #s{watchers = Ws, val = Z}) ->
-    put(short_circuit, get(short_circuit) + 1),
-     [mc_bang(Clnt, {watch_notify_maybe_req, ClOp, mc_self(), Z}) ||
-         {Clnt, ClOp} <- Ws],
-    S.
+    if Ws == [] ->
+            e_server_unasked(S#s{asker = undefined,
+                                 cookie = undefined,
+                                 watchers = []});
+       true ->
+            mc_put(short_circuit, mc_get(short_circuit) + 1),
+            [mc_bang(Clnt, {watch_notify_maybe_req, ClOp, mc_self(), Z}) ||
+                {Clnt, ClOp} <- Ws],
+            e_server_change_notif_toindividuals(S)
+    end.
 
 e_unconditional_utrace(#obj{contents = Z0C}, #obj{contents = Z1C}, Z) ->
     Val = case Z#obj.contents of Z0C -> new;
@@ -1319,15 +1323,15 @@ e_unconditional_utrace(#obj{contents = Z0C}, #obj{contents = Z1C}, Z) ->
           end,
     mc_probe({unconditional_set, Val}).
 
--define(CONST, 1).
+-define(CONST, 4).
 
 mc_bang(Rcpt, Msg) ->
-    case get(short_circuit) of
+    case mc_get(short_circuit) of
         N when N < ?CONST ->
             slf_msgsim_qc:mc_bang(Rcpt, Msg);
         N when N == ?CONST ->
             %% From now on, we can't drop messages.
-            put(short_circuit, N + 1), %% avoid multiple probes
+            mc_put(short_circuit, N + 1), %% avoid multiple probes
             mc_probe({short_circuit_fired, mc_self(), N}),
             Rcpt ! Msg;
         _ ->
@@ -1343,6 +1347,12 @@ mc_self() ->
 mc_probe(Term) ->
     mce_erl:probe(Term).
     %% io:format(user, "Probe: ~p\n", [Term]).
+
+mc_get(Key) ->
+    mcerlang:gget(Key).
+
+mc_put(Key, Val) ->
+    mcerlang:gput(Key, Val).
 
 %%% BEGIN From riak_object.erl, also Apache Public License v2 licensed
 %%% Copyright (c) 2007-2010 Basho Technologies, Inc.  All Rights Reserved.

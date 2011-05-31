@@ -219,20 +219,21 @@ prop_mc_simulate2(Module, ModProps, NumClients, NumServers, _NumKeys,
     %% Well, client and server processes are started symmetrically, but
     %% they end asymmetrically: client results are harvested before a
     %% 'shutdown' message, but server results are harvested after.
-io:format(user, "LINE ~p\n", [?LINE]),
+%% io:format(user, "LINE ~p\n", [?LINE]),
     ClientResults = harvest_client_results(ClPids),
-io:format(user, "LINE ~p\n", [?LINE]),
+%% io:format(user, "LINE ~p\n", [?LINE]),
     [catch (Svr ! shutdown) || Svr <- ServerPids ++ ClPids],
-io:format(user, "LINE ~p\n", [?LINE]),
-    _ServerResults = harvest_client_results(ServerPids),
-io:format(user, "LINE ~p\n", [?LINE]),
+%% io:format(user, "LINE ~p\n", [?LINE]),
+%%     _ServerResults = harvest_client_results(ServerPids),
+%% io:format(user, "LINE ~p\n", [?LINE]),
     [begin catch unlink(whereis(Proc)),
            catch exit(whereis(Proc), kill)
      end || Proc <- Module:all_clients() ++ Module:all_servers()],
-    io:format(user, "v", []),
+    %% io:format(user, "v", []),
     true = Module:verify_mc_property(NumClients, NumServers, ModProps,
                                      x, x, Ops, ClientResults),
-    io:format(user, "V", []).
+    %% io:format(user, "V", []).
+    ok.
 
 get_settings(ModProps) ->
     {proplists:get_value(min_clients, ModProps, 1),
@@ -252,19 +253,6 @@ my_list_elements([]) ->
 my_list_elements(L) ->
     list(elements(L)).
 
-harvest_client_results(Pids) ->
-    [begin
-         io:format(user, "harvest ~p: ", [Pid]),
-         receive
-             {Pid, X} ->
-                 io:format(user, "~p|", [X]),
-                 X
-                 %% after 50*1000 ->
-                 %%         io:format(user, "~p|", [hey_timeout_bad]),
-                 %%         exit(hey_timeout_bad)
-         end
-     end || Pid <- Pids].
-
 set_self(Name) ->
     erlang:put({?MODULE, self}, Name).
 
@@ -280,15 +268,15 @@ mc_self() ->
     get_self().
 
 start_mc_proc(Parent, Module, Type, Name, Ops, InitState) ->
-    Pid = spawn(fun() ->
+    Pid = spawn_link(fun() ->
                         register(Name, self()),
                         set_self(Name),
                         receive {ping, From} -> From ! pong end,
                         StartFun = Module:startup(Type),
                         try
-io:format(user, "<", []),
+%% io:format(user, "<", []),
                             V = StartFun(Ops, InitState),
-io:format(user, ">", []),
+%% io:format(user, ">", []),
                             Parent ! {self(), V}
                         catch
                             X:Y ->
@@ -300,4 +288,17 @@ io:format(user, ">", []),
     Pid ! {ping, self()},
     receive pong -> pong after 250 -> exit({failed_pingpong, Name}) end,
     Pid.
+
+harvest_client_results(Pids) ->
+    [begin
+         %% io:format(user, "harvest ~p: ", [Pid]),
+         receive
+             {Pid, X} ->
+                 %% io:format(user, "~p|", [X]),
+                 X
+                 %% after 50*1000 ->
+                 %%         io:format(user, "~p|", [hey_timeout_bad]),
+                 %%         exit(hey_timeout_bad)
+         end
+     end || Pid <- Pids].
 
