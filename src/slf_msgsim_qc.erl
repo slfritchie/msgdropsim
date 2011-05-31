@@ -212,13 +212,20 @@ prop_mc_simulate2(Module, ModProps, NumClients, NumServers, _NumKeys,
     ClPids = [start_mc_proc(Parent, Module, client, Name,
                                 orddict:fetch(Name, OpsD), InitState) ||
                      {Name, InitState, _} <- ClientInits],
-    mce_erl:probe(end_sequential),
+
+    %% TODO: Figure out how to use mce_app:blah_then_verify()
+    %% distrib_counter_2phase_vclocksetwatch_sim:mc_probe(end_sequential),
+
     %% Well, client and server processes are started symmetrically, but
     %% they end asymmetrically: client results are harvested before a
     %% 'shutdown' message, but server results are harvested after.
+io:format(user, "LINE ~p\n", [?LINE]),
     ClientResults = harvest_client_results(ClPids),
+io:format(user, "LINE ~p\n", [?LINE]),
     [catch (Svr ! shutdown) || Svr <- ServerPids ++ ClPids],
+io:format(user, "LINE ~p\n", [?LINE]),
     _ServerResults = harvest_client_results(ServerPids),
+io:format(user, "LINE ~p\n", [?LINE]),
     [begin catch unlink(whereis(Proc)),
            catch exit(whereis(Proc), kill)
      end || Proc <- Module:all_clients() ++ Module:all_servers()],
@@ -246,12 +253,16 @@ my_list_elements(L) ->
     list(elements(L)).
 
 harvest_client_results(Pids) ->
-    [receive
-         {Pid, X} ->
-             io:format(user, "x", []),
-             X
-     %% after 50*1000 ->
-     %%         exit(hey_timeout_bad)
+    [begin
+         io:format(user, "harvest ~p: ", [Pid]),
+         receive
+             {Pid, X} ->
+                 io:format(user, "~p|", [X]),
+                 X
+                 %% after 50*1000 ->
+                 %%         io:format(user, "~p|", [hey_timeout_bad]),
+                 %%         exit(hey_timeout_bad)
+         end
      end || Pid <- Pids].
 
 set_self(Name) ->
@@ -275,13 +286,14 @@ start_mc_proc(Parent, Module, Type, Name, Ops, InitState) ->
                         receive {ping, From} -> From ! pong end,
                         StartFun = Module:startup(Type),
                         try
-                            exit(V = StartFun(Ops, InitState)),
-                            io:format(user, "<", []),
-                            Parent ! {self(), V},
-                            io:format(user, ">", [])
-                        catch X:Y ->
-                                io:format(user, "~p ~p, ", [X,Y]),
-                                Parent ! {self, bad}
+io:format(user, "<", []),
+                            V = StartFun(Ops, InitState),
+io:format(user, ">", []),
+                            Parent ! {self(), V}
+                        catch
+                            X:Y ->
+                                io:format(user, "ERROR ~p ~p, ", [X,Y]),
+                                Parent ! {self(), bad}
                         end,
                         exit(normal)
                 end),

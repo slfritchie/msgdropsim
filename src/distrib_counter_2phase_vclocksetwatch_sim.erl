@@ -308,6 +308,11 @@ verify_property(NumClients, NumServers, _Props, F1, F2, Ops,
                C4 == [] andalso C5 == [] andalso C6 == []
        end))))))))))))))))))))))).
 
+verify_mc_property(NumClients, _NumServers, ModProps, _F1, _F2,
+                   Ops, ClientResults) ->
+    io:format(user, "v", []),
+    true. %% SLF_TODO_fixme_vacuously_true.
+
 %%% Protocol implementation
 
 %% Message sequence diagram
@@ -842,6 +847,7 @@ startup(server) ->
 
 e_client(Ops, State) ->
     [mc_bang(mc_self(), Op) || Op <- Ops],
+    mc_self() ! stop_now_kludge,
     e_client_init(State).
 
 e_client_init(C) ->
@@ -884,6 +890,8 @@ e_client_init(C) ->
             %% arrived late in a prior 'counter_op' request.  We don't care
             %% about them, but we should consume them.
             e_client_init(C);
+        stop_now_kludge ->
+            C;
         shutdown ->
             C
     end.
@@ -955,6 +963,7 @@ e_client_ph2_waiting(C = #c{clop = ClOp,
                     e_client_ph2_waiting(C#c{num_responses = NumResps + 1,
                                              watchers = NewWatchers});
                true ->
+                    io:format(user, "DELME ~p|", [{counter, C#c.ph2_now, Z, NewWatchers}]),
                     mc_probe({counter, C#c.ph2_now, Z, NewWatchers}),
                     if NewWatchers == [] ->
                             e_client_init(#c{});
@@ -971,6 +980,7 @@ e_client_ph2_waiting(C = #c{clop = ClOp,
     after ?TIMEOUT ->
             Q = calc_q(C),
             if NumResps >= Q ->
+                    io:format(user, "DELME ~p|", [{counter, C#c.ph2_now, Z, lists:usort(Ws)}]),
                     mc_probe({counter, C#c.ph2_now, Z, lists:usort(Ws)}),
                     e_cl_send_notifications(C),
                     e_client_notif_resp_waiting(C);
@@ -1081,6 +1091,7 @@ e_client_watch_waiting(C = #c{clop = ClOp,
                               num_responses = NumResps0, ph1_oks = Oks0}) ->
     receive
         {watch_notify_req, ClOp, From, Z} ->
+            io:format(user, "DELME ~p|", [{watch_notify, ClOp, Z}]),
             mc_probe({watch_notify, ClOp, Z}),
             mc_bang(From, {watch_notify_resp, mc_self(), ClOp, ok}),
             e_client_init(#c{});
@@ -1088,6 +1099,7 @@ e_client_watch_waiting(C = #c{clop = ClOp,
         %%       (because a quorum of maybes change =?= definite change?)
         %%       or keep things as they are: a maybe is a maybe
         {watch_notify_maybe_req, ClOp, From, Z} ->
+            io:format(user, "DELME ~p|", [{watch_notify_maybe, ClOp, Z}]),
             mc_probe({watch_notify_maybe, ClOp, Z}),
             mc_bang(From, {watch_notify_maybe_resp, mc_self(), ClOp, ok}),
             e_client_init(#c{});
@@ -1104,6 +1116,7 @@ e_client_watch_waiting_2(C = #c{clop = ClOp,
                                 num_responses = NumResps0, ph1_oks = Oks0}) ->
     receive
         {watch_notify_req, ClOp, From, Z} ->
+            io:format(user, "DELME ~p|", [{watch_notify, ClOp, Z}]),
             mc_probe({watch_notify, ClOp, Z}),
             mc_bang(From, {watch_notify_resp, mc_self(), ClOp, ok}),
             e_client_init(#c{});
@@ -1111,6 +1124,7 @@ e_client_watch_waiting_2(C = #c{clop = ClOp,
         %%       (because a quorum of maybes change =?= definite change?)
         %%       or keep things as they are: a maybe is a maybe
         {watch_notify_maybe_req, ClOp, From, Z} ->
+            io:format(user, "DELME ~p|", [{watch_notify_maybe, ClOp, Z}]),
             mc_probe({watch_notify_maybe, ClOp, Z}),
             mc_bang(From, {watch_notify_maybe_resp, mc_self(), ClOp, ok}),
             e_client_init(#c{});
@@ -1313,7 +1327,7 @@ mc_bang(Rcpt, Msg) ->
             slf_msgsim_qc:mc_bang(Rcpt, Msg);
         N when N == ?CONST ->
             %% From now on, we can't drop messages.
-            put(short_circuit, N + 1), % avoid multiple probes
+            put(short_circuit, N + 1), %% avoid multiple probes
             mc_probe({short_circuit_fired, mc_self(), N}),
             Rcpt ! Msg;
         _ ->
@@ -1327,8 +1341,8 @@ mc_self() ->
     %% erlang:self().
 
 mc_probe(Term) ->
-    %% mce_erl:probe(Term).
-    io:format("Probe: ~p\n", [Term]).
+    mce_erl:probe(Term).
+    %% io:format(user, "Probe: ~p\n", [Term]).
 
 %%% BEGIN From riak_object.erl, also Apache Public License v2 licensed
 %%% Copyright (c) 2007-2010 Basho Technologies, Inc.  All Rights Reserved.
