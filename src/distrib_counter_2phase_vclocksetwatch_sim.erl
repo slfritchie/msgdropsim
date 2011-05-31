@@ -990,15 +990,15 @@ e_client_ph2_waiting(C = #c{clop = ClOp,
             mc_bang(Server, {ph2_do_set, mc_self(), ClOp, Cookie, Z}),
             e_client_ph2_waiting(C#c{ph1_oks = [Msg|Oks]});
         %% next 2 clauses, first bugfix for McErlang??
-        {watch_notify_req, _ClOp, From, _Z} ->
+        {watch_notify_req, ClOp_late, From, _Z} ->
             %% Race: this arrived late, need to respond to it, though.
             mc_probe({late_watch_notify_req, ClOp, Z}),
-            mc_bang(From, {watch_notify_resp, mc_self(), ClOp, ok}),
+            mc_bang(From, {watch_notify_resp, mc_self(), ClOp_late, ok}),
             e_client_ph2_waiting(C);
-        {watch_notify_maybe_req, _ClOp, From, _Z} ->
+        {watch_notify_maybe_req, ClOp_late, From, _Z} ->
             %% Race: this arrived late, need to respond to it, though.
             mc_probe({late_watch_notify_maybe_req, Z}),
-            mc_bang(From, {watch_notify_maybe_resp, mc_self(), ClOp, ok}),
+            mc_bang(From, {watch_notify_maybe_resp, mc_self(), ClOp_late, ok}),
             e_client_ph2_waiting(C)
     after ?TIMEOUT ->
             Q = calc_q(C),
@@ -1287,6 +1287,7 @@ e_server_change_notif_toindividuals(S = #s{watchers = Ws}) ->
     after ?TIMEOUT ->
             io:format(user, "ms=~p,", [length(S#s.watchers)]),
             mc_probe({slf, ?LINE, S#s.watchers}),
+            mc_put(short_circuit, mc_get(short_circuit) + 1),
             e_sv_send_maybe_notifications(S)
     end.
 
@@ -1333,7 +1334,6 @@ e_sv_send_maybe_notifications(S = #s{watchers = Ws, val = Z}) ->
                                  cookie = undefined,
                                  watchers = []});
        true ->
-            mc_put(short_circuit, mc_get(short_circuit) + 1),
             [mc_bang(Clnt, {watch_notify_maybe_req, ClOp, mc_self(), Z}) ||
                 {Clnt, ClOp} <- Ws],
             e_server_change_notif_toindividuals(S)
