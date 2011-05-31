@@ -471,6 +471,18 @@ client_ph2_waiting({ph1_ask_ok, ClOp, Server, Cookie, _Z} = Msg,
                    C = #c{clop = ClOp, ph1_oks = Oks, ph2_val = Z}) ->
     slf_msgsim:bang(Server, {ph2_do_set, slf_msgsim:self(), ClOp, Cookie, Z}),
     {recv_timeout, same, C#c{ph1_oks = [Msg|Oks]}};
+%% next 2 clauses, first bugfix for McErlang??
+client_ph2_waiting({watch_notify_req, ClOp, From, Z}, C) ->
+    %% Race: this arrived late, need to respond to it, though.
+    slf_msgsim:add_utrace({late_watch_notify_req, ClOp, Z}),
+    slf_msgsim:bang(From, {watch_notify_resp, slf_msgsim:self(), ClOp, ok}),
+    {recv_general, same, C};
+client_ph2_waiting({watch_notify_maybe_req, ClOp, From, Z}, C) ->
+    %% Race: this arrived late, need to respond to it, though.
+    slf_msgsim:add_utrace({late_watch_notify_maybe_req, Z}),
+    slf_msgsim:bang(From, {watch_notify_maybe_resp,
+                           slf_msgsim:self(), ClOp, ok}),
+    {recv_general, same, C};
 client_ph2_waiting(timeout, C = #c{num_responses = NumResps, ph2_val = Z,
                                    watchers = Ws}) ->
     Q = calc_q(C),
@@ -976,7 +988,18 @@ e_client_ph2_waiting(C = #c{clop = ClOp,
             end;
         {ph1_ask_ok, ClOp, Server, Cookie, _Z} = Msg ->
             mc_bang(Server, {ph2_do_set, mc_self(), ClOp, Cookie, Z}),
-            e_client_ph2_waiting(C#c{ph1_oks = [Msg|Oks]})
+            e_client_ph2_waiting(C#c{ph1_oks = [Msg|Oks]});
+        %% next 2 clauses, first bugfix for McErlang??
+        {watch_notify_req, _ClOp, From, _Z} ->
+            %% Race: this arrived late, need to respond to it, though.
+            mc_probe({late_watch_notify_req, ClOp, Z}),
+            mc_bang(From, {watch_notify_resp, mc_self(), ClOp, ok}),
+            e_client_ph2_waiting(C);
+        {watch_notify_maybe_req, _ClOp, From, _Z} ->
+            %% Race: this arrived late, need to respond to it, though.
+            mc_probe({late_watch_notify_maybe_req, Z}),
+            mc_bang(From, {watch_notify_maybe_resp, mc_self(), ClOp, ok}),
+            e_client_ph2_waiting(C)
     after ?TIMEOUT ->
             Q = calc_q(C),
             if NumResps >= Q ->
