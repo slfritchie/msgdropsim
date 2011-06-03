@@ -249,6 +249,7 @@ get_self() ->
     erlang:get({?MODULE, self}).
 
 mc_bang(Rcpt, Msg) ->
+    %% Rcpt ! Msg.
     Send = fun() -> Rcpt ! Msg end,
     Drop = fun() -> mce_erl:probe({drop_msg, mc_self(), Rcpt, Msg}) end,
     mce_erl:choice([{Send, []}, {Drop, []}]).
@@ -269,7 +270,7 @@ start_mc_proc(Parent, Module, Type, Name, Ops, InitState) ->
                         eat_everything()
                 end),
     Pid ! {ping, self()},
-    receive pong -> pong after 250 -> exit({failed_pingpong, Name}) end,
+    receive pong -> pong end,
     Pid.
 
 eat_everything() ->
