@@ -33,11 +33,14 @@
 %% -define(TIMEOUT, 250).
 -define(TIMEOUT, 30*1000).
 
+-define(L(LIST), lists:sort(LIST)).
+
 -include_lib("eqc/include/eqc.hrl").
 
 -record(c, {                                    % client state
           clop              :: 'undefined' | reference(),
           num_servers       :: integer(),
+%% remove num_responses, always calculate it ... but will that work for                                                          both phases???????????????
           num_responses = 0 :: integer(),
           ph1_oks = []      :: list(),
           %% counter-related items
@@ -45,8 +48,7 @@
           ph2_val = 0       :: integer(),
           ph2_now           :: 'undefined' | {integer(), integer(), integer()},
           %% watch-related items
-          watchers = []     :: [{atom(), ClOp::term()}],
-          watchers2 = []    :: [{atom(), ClOp::term()}]
+          watchers = []     :: [{atom(), ClOp::term()}]
          }).
 
 -record(obj, {
@@ -461,8 +463,7 @@ client_ph2_waiting({ph2_ok, ClOp, Watchers},
             if NewWatchers == [] ->
                     {recv_general, client_init, #c{}};
                true ->
-                    NewC = C#c{watchers = NewWatchers,
-                               watchers2 = NewWatchers},
+                    NewC = C#c{watchers = NewWatchers},
                     cl_send_notifications(NewC),
                     {recv_timeout, client_notif_resp_waiting, NewC}
             end
@@ -840,7 +841,7 @@ do_reconcile(Objs0, _WhoIsIt) ->
     Contents = lists:append([Z#obj.contents || Z <- Objs]),
     VClock = vclock:merge([Z#obj.vclock || Z <- Objs]),
     Obj1 = hd(Objs),
-    Obj1#obj{vclock=VClock, contents=Contents}.
+    Obj1#obj{vclock=?L(VClock), contents=?L(Contents)}.
 
 %%% Misc....
 
@@ -911,14 +912,15 @@ e_client_init(C) ->
 %%% Client counter-related states
 
 e_client_ph1_waiting(C = #c{clop = ClOp, num_responses = Resps,
-                            ph1_oks = Oks, ph1_sorrys = Sorrys}) ->
+                            ph1_oks = Oks, ph1_sorrys = _Sorrys}) ->
     receive
         {ph1_ask_ok, ClOp, _Server, _Cookie, _Z} = Msg ->
             e_cl_p1_next_step(C#c{num_responses = Resps + 1,
-                                  ph1_oks = [Msg|Oks]});
-        {ph1_ask_sorry, ClOp, _Server, _LuckyClient} = Msg ->
-            e_cl_p1_next_step(C#c{num_responses = Resps + 1,
-                                  ph1_sorrys = [Msg|Sorrys]})
+                                  ph1_oks = ?L([Msg|Oks])});
+        {ph1_ask_sorry, ClOp, _Server, _LuckyClient} = _Msg ->
+            e_cl_p1_next_step(C#c{num_responses = Resps + 1
+                                  %% Unused! ph1_sorrys = ?L([Msg|Sorrys])
+                                 })
     after foo_timeout() ->
             %% Fake like we got responses from all servers ... plus a few extra.
             e_cl_p1_next_step(C#c{num_responses = 9999999999})
@@ -931,7 +933,7 @@ e_client_ph1_cancelling(C = #c{clop = ClOp, ph1_oks = Oks}) ->
             if NewOks == [] ->
                     e_client_init(#c{});
                true ->
-                    e_client_ph1_cancelling(C#c{ph1_oks = NewOks})
+                    e_client_ph1_cancelling(C#c{ph1_oks = ?L(NewOks)})
             end
     after foo_timeout() ->
             e_cl_p1_send_cancels(C)
@@ -958,7 +960,7 @@ e_cl_p1_next_step(C = #c{num_responses = NumResps}) ->
 e_cl_p1_send_cancels(C = #c{clop = ClOp, ph1_oks = Oks}) ->
     mc_put(short_circuit, mc_get(short_circuit) + 1),
     [mc_bang(5, Server, {ph1_cancel, mc_self(), ClOp, Cookie}) ||
-        {ph1_ask_ok, _ClOp, Server, Cookie, _Z} <- Oks],
+        {ph1_ask_ok, _ClOp, Server, Cookie, _Z} <- ?L(Oks)],
     e_client_ph1_cancelling(C).
 
 %% TODO: Is it necessary for for _all_ of the client counter-related
@@ -969,27 +971,26 @@ e_client_ph2_waiting(C = #c{clop = ClOp,
                             num_responses = NumResps, ph2_val = Z,
                             watchers = Ws, ph1_oks = Oks}) ->
     receive
-        _Msg = {ph2_ok, ClOp, Watchers} ->
+        {ph2_ok, ClOp, Watchers} ->
             NewWatchers = lists:usort(Watchers ++ Ws),
             if length(C#c.ph1_oks) /= NumResps + 1 ->
                     e_client_ph2_waiting(C#c{num_responses = NumResps + 1,
-                                             watchers = NewWatchers});
+                                             watchers = ?L(NewWatchers)});
                true ->
                     %% io:format(user, "X~w, ", [Z#obj.contents]),
-                    %% io:format(user, "\nDELME1 ~w ", [{counter, C#c.ph2_now, Z, NewWatchers}]),
-                    mc_probe({counter, C#c.ph2_now, Z, NewWatchers}),
+                    %% io:format(user, "\nDELME1 ~w ", [{counter, Z, NewWatchers}]),
+                    mc_probe({counter, Z, NewWatchers}),
                     if NewWatchers == [] ->
                             e_client_init(#c{});
                        true ->
-                            NewC = C#c{watchers = NewWatchers,
-                                       watchers2 = NewWatchers},
+                            NewC = C#c{watchers = ?L(NewWatchers)},
                             e_cl_send_notifications(NewC),
                             e_client_notif_resp_waiting(NewC)
                     end
             end;
         {ph1_ask_ok, ClOp, Server, Cookie, _Z} = Msg ->
             mc_bang(6, Server, {ph2_do_set, mc_self(), ClOp, Cookie, Z}),
-            e_client_ph2_waiting(C#c{ph1_oks = [Msg|Oks]});
+            e_client_ph2_waiting(C#c{ph1_oks = ?L([Msg|Oks])});
         %% next 2 clauses, first bugfix for McErlang??
         {watch_notify_req, ClOp_late, From, _Z} ->
             %% Race: this arrived late, need to respond to it, though.
@@ -1004,9 +1005,9 @@ e_client_ph2_waiting(C = #c{clop = ClOp,
     after foo_timeout() ->
             Q = calc_q(C),
             if NumResps >= Q ->
-                    io:format(user, "Y~w, ", [Z#obj.contents]),
-                    %% io:format(user, "\nDELME2 ~w ", [{counter, C#c.ph2_now, Z, lists:usort(Ws)}]),
-                    mc_probe({counter, C#c.ph2_now, Z, lists:usort(Ws)}),
+                    %% io:format(user, "Y~w, ", [Z#obj.contents]),
+                    %% io:format(user, "\nDELME2 ~w ", [{counter, Z, lists:usort(Ws)}]),
+                    mc_probe({counter, Z, lists:usort(Ws)}),
                     e_cl_send_notifications(C),
                     e_client_notif_resp_waiting(C);
                true ->
@@ -1028,7 +1029,7 @@ e_client_notif_resp_waiting(C = #c{num_servers = NumServers, watchers = Ws}) ->
                         Server <- lists:sublist(all_servers(), 1, NumServers)],
                     e_client_init(#c{});
                 NewWs ->
-                    e_client_notif_resp_waiting(C#c{watchers = NewWs})
+                    e_client_notif_resp_waiting(C#c{watchers = ?L(NewWs)})
             end;
         {watch_notify_req, ClOp, From, Z} ->
             %% Race: this arrived late, need to respond to it, though.
@@ -1061,7 +1062,7 @@ e_client_watch_setup(C = #c{clop = ClOp,
         {watch_setup_resp, ClOp, _Server, ok} = Msg ->
             NumResps = NumResps0 + 1,
             Oks = [Msg|Oks0],
-            NewC = C#c{num_responses = NumResps, ph1_oks = Oks},
+            NewC = C#c{num_responses = NumResps, ph1_oks = ?L(Oks)},
             Q = calc_q(C),
             NumResps = length(Oks),             % sanity check
             if NumResps >= Q ->
@@ -1077,12 +1078,12 @@ e_client_watch_setup(C = #c{clop = ClOp,
 
 e_cl_watch_send_cancels(C = #c{clop = ClOp, ph1_oks = Oks}) ->
     if length(Oks) == 0 ->
-            e_client_init(C);
+            e_client_init(#c{});
        true ->
             mc_put(short_circuit, mc_get(short_circuit) + 1),
             Self = mc_self(),
             [mc_bang(13, Server, {watch_cancel_req, Self, ClOp}) ||
-                {watch_setup_resp, _ClOp, Server, ok} <- Oks],
+                {watch_setup_resp, _ClOp, Server, ok} <- ?L(Oks)],
             e_client_watch_cancelling(C)
     end.
 
@@ -1093,7 +1094,7 @@ e_client_watch_cancelling(C = #c{clop = ClOp, ph1_oks = Oks}) ->
             if NewOks == [] ->
                     e_client_init(#c{});
                true ->
-                    e_client_watch_cancelling(C#c{ph1_oks = NewOks})
+                    e_client_watch_cancelling(C#c{ph1_oks = ?L(NewOks)})
             end;
         {watch_notify_maybe_req, ClOp, Server, _Z} ->
             %% Honest race: this may be the thing that we're trying to cancel.
@@ -1134,7 +1135,7 @@ e_client_watch_waiting(C = #c{clop = ClOp,
             NumResps = NumResps0 + 1,
             Oks = [Msg|Oks0],
             e_client_watch_waiting(C#c{num_responses = NumResps,
-                                       ph1_oks = Oks})
+                                       ph1_oks = ?L(Oks)})
     after foo_timeout() ->
             e_client_watch_waiting_2(C)
     end.
@@ -1159,7 +1160,7 @@ e_client_watch_waiting_2(C = #c{clop = ClOp,
             NumResps = NumResps0 + 1,
             Oks = [Msg|Oks0],
             e_client_watch_waiting_2(C#c{num_responses = NumResps,
-                                         ph1_oks = Oks})
+                                         ph1_oks = ?L(Oks)})
     after foo_timeout() ->
             mc_probe({watch_timeout, ClOp}),
             e_cl_watch_send_cancels(C)
@@ -1246,7 +1247,7 @@ e_server_change_notif_fromsetter(S = #s{watchers = Ws}) ->
         {watch_notifies_delivered, Watchers} ->
             e_server_unasked(S#s{asker = undefined,
                                  cookie = undefined,
-                                 watchers = Ws -- Watchers});
+                                 watchers = ?L(Ws -- Watchers)});
         %% Due to a 1-way network partition, a client might repeatedly send us a
         %% zillion watch setup/cancel requests, but our replies are dropped, so
         %% they resend.  The simulator can require more than 10K simulator steps
@@ -1259,6 +1260,7 @@ e_server_change_notif_fromsetter(S = #s{watchers = Ws}) ->
     after foo_timeout() ->
             %% io:format(user, "ms=~p,", [length(S#s.watchers)]),
             mc_probe({slf, ?LINE, S#s.watchers}),
+            mc_put(short_circuit, mc_get(short_circuit) + 1),
             e_sv_send_maybe_notifications(S)
     end.
 
@@ -1271,7 +1273,7 @@ e_server_change_notif_toindividuals(S = #s{watchers = Ws}) ->
                                          cookie = undefined,
                                          watchers = []});
                 NewWs ->
-                    e_server_change_notif_toindividuals(S#s{watchers = NewWs})
+                    e_server_change_notif_toindividuals(S#s{watchers = ?L(NewWs)})
             end;
         {ph1_cancel, From, ClOp, _Cookie} ->
             %% Late arrival, tell client it's OK, but really we ignore it
@@ -1294,7 +1296,7 @@ e_server_change_notif_toindividuals(S = #s{watchers = Ws}) ->
     end.
 
 e_send_ask_ok(From, ClOp, S = #s{val = Z}) ->
-    Cookie = {cky, now()},
+    Cookie = {cky, mc_now()},
     mc_bang(107, From, {ph1_ask_ok, ClOp, mc_self(), Cookie, Z}),
     S#s{asker = From, cookie = Cookie}.
 
@@ -1306,29 +1308,27 @@ e_cl_p1_send_do(C = #c{num_servers = NumServers, clop = ClOp, ph1_oks = Oks}) ->
     Counter = lists:max(Z#obj.contents), %% app-specific logic here
     #obj{vclock = VClock} = Z,
     NewCounter = Counter + 1,
-    NewZ = Z#obj{vclock = vclock:increment(mc_self(), VClock),
+    NewZ = Z#obj{vclock = ?L(vclock:increment(mc_self(), VClock)),
                  contents = [NewCounter]},
-    Now = erlang:now(),
-    mc_probe({counter_start_ph2, Now, NewZ}),
+    mc_probe({counter_start_ph2, NewZ}),
     [mc_bang(20, Svr, {ph2_do_set, mc_self(), ClOp, Cookie, NewZ})
-     || {ph1_ask_ok, _x_ClOp, Svr, Cookie, _Z} <- Oks],
+     || {ph1_ask_ok, _x_ClOp, Svr, Cookie, _Z} <- ?L(Oks)],
     AllServers = lists:sublist(all_servers(), 1, NumServers),
     OkServers = [Svr || {ph1_ask_ok, _x_ClOp, Svr, _Cookie, _Z} <- Oks],
-    NotOkServers = AllServers -- OkServers,
+    NotOkServers = ?L(AllServers -- OkServers),
     [mc_bang(21, Svr, {unconditional_set, mc_self(), ClOp, NewZ}) ||
         Svr <- NotOkServers],
     [mc_probe({unconditional_set_sent, NotOkSvr}) || NotOkSvr <- NotOkServers],
     e_client_ph2_waiting(C#c{num_responses = 0,
-                             ph2_val = NewZ,
-                             ph2_now = Now}).
+                             ph2_val = NewZ}).
 
 e_sv_watch_setup({watch_setup_req, From, ClOp}, S = #s{watchers = Ws}) ->
     mc_bang(108, From, {watch_setup_resp, ClOp, mc_self(), ok}),
-    S#s{watchers = [{From, ClOp}|Ws]}.
+    S#s{watchers = ?L([{From, ClOp}|Ws])}.
 
 e_sv_watch_cancel({watch_cancel_req, From, ClOp}, S = #s{watchers = Ws}) ->
     mc_bang(109, From, {watch_cancel_resp, ClOp, mc_self(), ok}),
-    S#s{watchers = Ws -- [{From, ClOp}]}.
+    S#s{watchers = ?L(Ws -- [{From, ClOp}])}.
 
 e_sv_send_maybe_notifications(S = #s{watchers = Ws, val = Z}) ->
     if Ws == [] ->
@@ -1337,7 +1337,7 @@ e_sv_send_maybe_notifications(S = #s{watchers = Ws, val = Z}) ->
                                  watchers = []});
        true ->
             [mc_bang(110, Clnt, {watch_notify_maybe_req, ClOp, mc_self(), Z}) ||
-                {Clnt, ClOp} <- Ws],
+                {Clnt, ClOp} <- ?L(Ws)],
             e_server_change_notif_toindividuals(S)
     end.
 
@@ -1387,6 +1387,9 @@ mc_get(Key) ->
 
 mc_put(Key, Val) ->
     mcerlang:gput(Key, Val).
+
+mc_now() ->
+    make_ref().
 
 foo_timeout() ->
     case mc_get(short_circuit) of

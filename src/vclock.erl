@@ -153,7 +153,7 @@ all_nodes(VClock) ->
 % @doc Return a timestamp for a vector clock
 -spec timestamp() -> timestamp().
 timestamp() ->
-    make_ref().
+    vclock_constant_timestamp.
     %% now().
 
 % @doc Compares two VClocks for equality.
